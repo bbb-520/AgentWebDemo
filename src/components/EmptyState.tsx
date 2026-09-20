@@ -4,9 +4,9 @@ export default function EmptyState({ onAsk }: { onAsk: (q: string) => void }) {
   return (
     <div className="empty-wrap">
       <div className="hero">
-        <h1>
-          嗨，我是你的<span className="grad-text">AgentDemo</span>
-        </h1>
+        <div className="hero-kicker"><span className="hero-kicker-dot" /> bobo</div>
+        <h1>今天想一起去哪里？</h1>
+        <p>从天气、灵感到完整行程，让我帮你把想法变成下一站。</p>
       </div>
       <div className="sugg-grid">
         {SUGGESTIONS.map((s) => (

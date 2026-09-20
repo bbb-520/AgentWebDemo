@@ -70,7 +70,7 @@ export default function SettingsSheet({ settings, onChange, onClose }: Props) {
                 直连后端
               </span>
               <div className="mc-d">
-                对接 AgentDemo(Spring Boot) 的 SSE 接口，实时调用 Qwen + 天气/景点工具。
+                对接 bobo(Spring Boot) 的 SSE 接口，后端负责记忆、Qwen 与天气/景点工具编排。
               </div>
             </button>
           </div>

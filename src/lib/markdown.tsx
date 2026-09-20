@@ -3,16 +3,9 @@ import { Fragment, type ReactNode } from 'react';
 /**
  * 轻量 Markdown 渲染（不引入第三方依赖）。
  * 支持：代码块、行内代码、粗体/斜体、链接、标题、无序/有序列表、引用、分隔线。
- * 所有原始文本先做 HTML 转义，避免 XSS。
+ * 安全策略：所有文本都以 React 文本节点渲染（React 会自动转义，无需手写 esc()，
+ * 手动转义反而会造成 `&lt;` 这类实体字面量双转义）；仅链接 href 用 safeUrl 白名单校验。
  */
-
-function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 function safeUrl(u: string): string {
   return /^(https?:|mailto:)/i.test(u.trim()) ? u.trim() : '#';
@@ -36,7 +29,7 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
     } else if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
       nodes.push(
         <code key={key} className="md-code">
-          {esc(part.slice(1, -1))}
+          {part.slice(1, -1)}
         </code>,
       );
     } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
@@ -58,9 +51,9 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   return nodes;
 }
 
-/* ---------- 纯文本段落转义渲染 ---------- */
+/* ---------- 纯文本段落渲染（React 文本节点自带 HTML 转义，防 XSS） ---------- */
 function PlainText({ text }: { text: string }) {
-  return <>{esc(text)}</>;
+  return <>{text}</>;
 }
 
 /* ---------- 块级渲染 ---------- */
@@ -140,7 +133,7 @@ export default function Markdown({ content }: { content: string }) {
             </span>
             <span className="md-lang">{seg.lang}</span>
           </div>
-          <code>{esc(seg.text)}</code>
+          <code>{seg.text}</code>
         </pre>,
       );
       return;

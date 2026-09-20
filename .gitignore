@@ -3,3 +3,6 @@ dist
 *.local
 .DS_Store
 npm-debug.log*
+.build-check*
+.bc*
+vite.config.ts.timestamp-*

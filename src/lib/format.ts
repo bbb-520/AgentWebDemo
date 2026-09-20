@@ -20,6 +20,14 @@ export function fmtClock(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** ISO-8601(UTC) 时间戳 → 本地「YYYY-MM-DD HH:mm」；解析失败原样返回（摘要卡时间段展示用） */
+export function fmtStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** 毫秒 → 人类可读耗时 */
 export function fmtDuration(ms: number): string {
   if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;

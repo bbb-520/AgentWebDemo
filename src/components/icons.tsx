@@ -82,3 +82,26 @@ export const IconChevron = (p: P) => (
     <path d="m6 9 6 6 6-6" />
   </svg>
 );
+
+export const IconSearch = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.3-4.3" />
+  </svg>
+);
+
+/** 首页（返回开始页） */
+export const IconHome = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z" />
+    <path d="M9 21v-7h6v7" />
+  </svg>
+);
+
+/** 总结（Sparkles）：用于「总结当前会话」操作 */
+export const IconSummarize = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 4l1.7 4.3L18 10l-4.3 1.7L12 16l-1.7-4.3L6 10l4.3-1.7L12 4Z" />
+    <path d="M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z" />
+  </svg>
+);

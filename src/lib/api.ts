@@ -1,4 +1,12 @@
-import { EVENT, type ChatEvent, type Role } from '../types';
+import {
+  type ChatEvent,
+  type ConversationBrief,
+  type RemoteMessage,
+  type RemotePage,
+  type Role,
+  type SearchHit,
+  type SummarizeResult,
+} from '../types';
 
 /**
  * 拼接后端地址：baseUrl 为空时使用同源(开发经 Vite 代理 /api → Java 后端)。
@@ -8,7 +16,7 @@ export function apiUrl(path: string, baseUrl: string): string {
   return b ? `${b}${path}` : path;
 }
 
-export type StreamResult = { kind: 'done' | 'error'; message?: string };
+export type StreamResult = { kind: 'done' | 'error' | 'timeout'; message?: string };
 
 export interface StreamChatOptions {
   question: string;
@@ -16,6 +24,11 @@ export interface StreamChatOptions {
   baseUrl: string;
   signal?: AbortSignal;
   onEvent: (e: ChatEvent) => void;
+  /**
+   * 流空闲超时（单位 ms，默认 60000）：超过该时长未收到任何新数据视为连接挂起，
+   * 自动中断并返回 {kind:'timeout'}，避免 UI 永远停在「生成中」（文档 §8.7 兜底建议）。
+   */
+  idleTimeoutMs?: number;
 }
 
 /** 后端历史条目的前缀约定（API.md §3.4）：半角冒号 + 空格 */
@@ -55,6 +68,25 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
     else signal.addEventListener('abort', onOuterAbort, { once: true });
   }
 
+  /* --- 空闲超时兜底：每次收到新数据重置计时，超时则本地中断（§8.7） --- */
+  const idleMs = Math.max(3000, opts.idleTimeoutMs ?? 60000);
+  let idleHit = false;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearIdle = () => {
+    if (idleTimer !== undefined) {
+      clearTimeout(idleTimer);
+      idleTimer = undefined;
+    }
+  };
+  const resetIdle = () => {
+    clearIdle();
+    idleTimer = setTimeout(() => {
+      idleHit = true;
+      controller.abort();
+    }, idleMs);
+  };
+  resetIdle();
+
   /** 处理一行 SSE 数据（去掉行尾 \r、取 data: 载荷并派发事件） */
   const handleLine = (rawLine: string) => {
     const line = rawLine.replace(/\r$/, '');
@@ -75,6 +107,8 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({ question, sessionId }),
+      // AgentDemo 通过 HttpOnly 匿名 Cookie 绑定会话归属；直连模式同样需要带上它。
+      credentials: 'include',
       signal: controller.signal,
     });
 
@@ -93,6 +127,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
+      resetIdle(); // 收到任何新数据都视为「活动」，刷新空闲计时
 
       let nl: number;
       while ((nl = buffer.indexOf('\n')) >= 0) {
@@ -107,6 +142,13 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
     return { kind: 'done' };
   } catch (err) {
     const name = err instanceof DOMException ? err.name : '';
+    if (idleHit) {
+      // 空闲超时主动断连（区别于用户停止 / 网络错误）
+      return {
+        kind: 'timeout',
+        message: `连接空闲超过 ${Math.round(idleMs / 1000)}s 未收到数据，已自动中断`,
+      };
+    }
     if (name === 'AbortError' || controller.signal.aborted) {
       return { kind: 'done', message: '已停止' };
     }
@@ -122,6 +164,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
           : `未知错误（${url}）`;
     return { kind: 'error', message: msg };
   } finally {
+    clearIdle();
     if (signal) signal.removeEventListener('abort', onOuterAbort);
   }
 }
@@ -188,15 +231,17 @@ export async function probeBackend(baseUrl: string, timeoutMs = 3000): Promise<P
       ? setTimeout(() => controller.abort(), timeoutMs)
       : undefined;
   try {
-    // sessionId 用一次性值，避免与真实会话混淆（GET 不会在后端创建会话）
+    // AgentDemo 目前只暴露 POST /api/chat。GET 会得到 405，但这已经证明
+    // Spring Boot 路由可达；避免用 POST 探测导致真实模型调用。
     const res = await fetch(
-      apiUrl(`/api/chat/history?sessionId=probe-${Date.now()}`, baseUrl),
-      { signal: controller.signal },
+      apiUrl('/api/chat', baseUrl),
+      { method: 'GET', cache: 'no-store', signal: controller.signal },
     );
+    const reachable = res.ok || res.status === 405;
     return {
-      ok: res.ok,
+      ok: reachable,
       status: res.status,
-      message: res.ok ? '后端可达，历史接口正常' : `后端返回 HTTP ${res.status}`,
+      message: reachable ? '后端可达，SSE 对话接口已就绪' : `后端返回 HTTP ${res.status}`,
     };
   } catch (err) {
     const aborted = err instanceof DOMException && err.name === 'AbortError';
@@ -214,5 +259,179 @@ export async function probeBackend(baseUrl: string, timeoutMs = 3000): Promise<P
   }
 }
 
-/** 便于复用，导出事件常量 */
-export { EVENT };
+/* =====================================================================
+ * 会话记忆二级存储接口（2026-09-07 后端新增，Redis 长期历史）
+ * 契约见 FRONTEND_REQUIREMENTS.md §4.5 / §4.8 / §4.7
+ * ===================================================================== */
+
+/**
+ * 分页查询会话历史：GET /api/chat/{sessionId}/messages?page=&size=
+ *
+ * 页码从 1 开始，size 默认 20；按时间升序。后端对 page<1 / size<1 有兜底。
+ * {@link restoreSessionMessages} 基于本函数做「恢复会话」的分页循环。
+ */
+export async function fetchSessionMessagesPage(
+  sessionId: string,
+  page: number,
+  size: number,
+  baseUrl: string,
+): Promise<RemotePage<RemoteMessage> | null> {
+  try {
+    const qs = `?page=${Math.max(1, page | 0)}&size=${Math.max(1, size | 0)}`;
+    const res = await fetch(
+      apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/messages${qs}`, baseUrl),
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as RemotePage<RemoteMessage>;
+    return json && Array.isArray(json.records) ? json : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface RestoreOptions {
+  /** 每页条数（默认 100，上限 200） */
+  pageSize?: number;
+  /**
+   * 恢复上限（默认 100，文档 §7.4）。会话不超过上限时逐页取满；
+   * 超过上限时只保留「时间上最近的一个连续窗口」（仍升序），保证能接着最新对话继续聊，
+   * 避免把整个超长会话渲染出来。
+   */
+  maxRecords?: number;
+}
+
+/**
+ * 按文档 §4.5（⭐恢复会话用）用分页接口循环恢复历史，替代一次性 /messages/all：
+ * 先取第 1 页拿到 total，再从计算出的起始页逐页取到最后一页。
+ *
+ * 任一页请求失败 / 后端为旧版本（404 / 结构不符）返回 null，
+ * 由调用方降级为旧文本接口 GET /history。
+ */
+export async function restoreSessionMessages(
+  sessionId: string,
+  baseUrl: string,
+  options: RestoreOptions = {},
+): Promise<RemoteMessage[] | null> {
+  const size = Math.min(200, Math.max(1, (options.pageSize ?? 100) | 0));
+  const cap = Math.max(1, (options.maxRecords ?? 100) | 0);
+
+  const first = await fetchSessionMessagesPage(sessionId, 1, size, baseUrl);
+  if (!first || !Array.isArray(first.records)) return null;
+
+  // 超长会话：计算能覆盖「最近 cap 条」的起始页（分页粒度可能带来少量冗余，末尾统一裁剪）
+  let fromPage = 1;
+  if (first.total > cap) {
+    const firstSeq = first.total - cap + 1; // 想保留的首条序号（从 1 起）
+    fromPage = Math.max(1, Math.ceil(firstSeq / size));
+  }
+
+  const records: RemoteMessage[] = first.records;
+  for (let p = fromPage; p <= first.totalPages; p++) {
+    if (p === 1) continue;
+    const pg = await fetchSessionMessagesPage(sessionId, p, size, baseUrl);
+    if (!pg) return null;
+    records.push(...pg.records);
+  }
+
+  if (records.length > cap) return records.slice(records.length - cap);
+  return records;
+}
+
+/**
+ * 手动触发会话压缩：POST /api/chat/{sessionId}/summarize
+ *
+ * 后端 LLM 对「保留最近 keep-recent 条」以外的旧历史生成 ≤max-length 字摘要，
+ * 并双写 Redis 与内存窗口（幂等：消息太少或上次摘要后新积累不足返回 summarized=false）。
+ * 返回 null 表示请求失败（后端不可达 / 非 200）。
+ */
+export async function requestSummarize(
+  sessionId: string,
+  baseUrl: string,
+): Promise<SummarizeResult | null> {
+  try {
+    const res = await fetch(
+      apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/summarize`, baseUrl),
+      { method: 'POST' },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as SummarizeResult;
+  } catch {
+    return null;
+  }
+}
+
+/* =====================================================================
+ * 会话记忆检索（API.md §4.9 / §4.10，契约已定稿；后端实现前接口 404）
+ * 按 A8 约定：后端未实现/不可达时静默降级（返回 null / 空数组），UI 不弹错。
+ * ===================================================================== */
+
+/** GET /api/chat/search 的查询参数（API.md §4.9，全部可选） */
+export interface SearchMessagesParams {
+  /** 全文关键词（作用于 content TEXT 字段）；省略/空串 = 不做全文过滤 */
+  q?: string;
+  /** 原始 sessionId（本地会话 id）；省略 = 跨会话全局搜索 */
+  sessionId?: string;
+  /** USER / ASSISTANT / SYSTEM / TOOL，精确匹配；省略 = 不限 */
+  messageType?: string;
+  /** 起始时间（epoch 毫秒，闭区间） */
+  from?: number;
+  /** 结束时间（epoch 毫秒，闭区间） */
+  to?: number;
+  /** 1-based */
+  page?: number;
+  /** 每页条数 */
+  size?: number;
+}
+
+/**
+ * 全文/条件检索：GET /api/chat/search
+ * 响应为 PageResult<SearchHit>，按 seq 倒序（最新优先）。
+ * 网络失败 / HTTP 非 2xx（含后端未实现 404）→ 返回 null，由 UI 静默降级为空态。
+ */
+export async function searchMessages(
+  params: SearchMessagesParams,
+  baseUrl: string,
+): Promise<RemotePage<SearchHit> | null> {
+  try {
+    const qs = new URLSearchParams();
+    if (typeof params.q === 'string' && params.q.trim()) qs.set('q', params.q.trim());
+    if (typeof params.sessionId === 'string' && params.sessionId.trim())
+      qs.set('sessionId', params.sessionId.trim());
+    if (typeof params.messageType === 'string' && params.messageType)
+      qs.set('messageType', params.messageType);
+    if (typeof params.from === 'number' && Number.isFinite(params.from))
+      qs.set('from', String(Math.trunc(params.from)));
+    if (typeof params.to === 'number' && Number.isFinite(params.to))
+      qs.set('to', String(Math.trunc(params.to)));
+    const page = Math.max(1, (params.page ?? 1) | 0);
+    const size = Math.max(1, Math.min(200, (params.size ?? 20) | 0));
+    qs.set('page', String(page));
+    qs.set('size', String(size));
+
+    const res = await fetch(apiUrl(`/api/chat/search?${qs.toString()}`, baseUrl));
+    if (!res.ok) return null;
+    const json = (await res.json()) as RemotePage<SearchHit>;
+    return json && Array.isArray(json.records) ? json : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 拉取后端会话列表：GET /api/chat/conversations
+ * 返回元素 sessionId 已剥离 chat- 前缀，可直接作为搜索/恢复的入参。
+ * 网络失败 / 接口未实现（404）→ 返回空数组，UI 降级为仅展示本地会话。
+ */
+export async function fetchRemoteConversations(baseUrl: string): Promise<ConversationBrief[]> {
+  try {
+    const res = await fetch(apiUrl('/api/chat/conversations', baseUrl));
+    if (!res.ok) return [];
+    const json = (await res.json()) as { total?: number; conversations?: ConversationBrief[] };
+    const list = Array.isArray(json?.conversations) ? json.conversations : [];
+    return list.filter(
+      (c) => c && typeof c.sessionId === 'string' && c.sessionId,
+    ) as ConversationBrief[];
+  } catch {
+    return [];
+  }
+}

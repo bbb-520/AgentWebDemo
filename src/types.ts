@@ -66,9 +66,19 @@ export interface SessionInfoData {
   timestamp: number;
 }
 
-export type Role = 'user' | 'assistant';
+export type Role = 'user' | 'assistant' | 'system';
 
 export type MsgStatus = 'streaming' | 'done' | 'stopped' | 'error';
+
+/** 会话历史摘要卡片的元信息（对齐后端摘要消息 metadata，见 FRONTEND-REQUIREMENTS-会话记忆优化.md §4） */
+export interface SummaryMeta {
+  /** 该摘要覆盖的原始消息条数 */
+  summarizedCount?: number;
+  /** 覆盖时间范围起点（ISO-8601 UTC） */
+  rangeStart?: string;
+  /** 覆盖时间范围终点（ISO-8601 UTC） */
+  rangeEnd?: string;
+}
 
 /** 一轮结束原因：stop=正常 / error=错误 / stopped_by_user=用户中断 / aborted=连接异常 */
 export type EndReason = 'stop' | 'error' | 'stopped_by_user' | 'aborted';
@@ -109,11 +119,15 @@ export interface ChatMsg {
   conversationId?: string;
   /** 本轮结束原因（收尾语义，文档 §6.2 endReason） */
   endReason?: EndReason;
+  /** 摘要卡专属：role='system' 时携带压缩摘要的覆盖范围信息（恢复自后端 metadata） */
+  summaryMeta?: SummaryMeta | null;
   createdAt: number;
   /** 助手消息：开始生成的时间戳 */
   startedAt?: number;
   /** 助手消息：生成结束（完成/停止/出错）的时间戳 */
   finishedAt?: number;
+  /** 后端 Redis 历史序号（从远端恢复/补拉时透传；用于搜索跳转 data-seq 定位，本地新消息为 undefined） */
+  seq?: number;
 }
 
 /** 一个会话 = 一个后端 sessionId（记忆上下文），加上本地持久化的消息列表 */
@@ -136,6 +150,72 @@ export const DEFAULT_SETTINGS: Settings = {
   baseUrl: '',
   demoMode: true,
 };
+
+/* ---------- 后端会话记忆结构化消息（对齐 MessageWithConversation / PageResult） ----------
+ * 对应接口：
+ *   GET  /api/chat/{sessionId}/messages          分页查询（Redis，恢复历史用）
+ *   GET  /api/chat/{sessionId}/messages/all      全量消息（Redis，含摘要）
+ *   POST /api/chat/{sessionId}/summarize         手动触发压缩
+ */
+
+/** 后端消息类型（MessageWithConversation 的字符串 messageType） */
+export type RemoteMsgType = 'USER' | 'ASSISTANT' | 'SYSTEM' | 'TOOL';
+
+/** 摘要消息 metadata 键（后端常量） */
+export const REMOTE_META = {
+  SUMMARY: 'summary',
+  SUMMARIZED_COUNT: 'summarizedCount',
+  RANGE_START: 'rangeStart',
+  RANGE_END: 'rangeEnd',
+} as const;
+
+/** 一条后端会话消息（分页 records / messages/all 的数组元素，结构一致） */
+export interface RemoteMessage {
+  /** 内部会话键，形如 chat-xxx */
+  conversationId: string;
+  messageType: RemoteMsgType;
+  /** 消息文本；摘要消息为 SystemMessage 原文（带「以下是此前对话的摘要：」前缀） */
+  content: string;
+  /** 普通消息为 null；摘要消息带 summary 标记与覆盖范围 */
+  metadata: { [k: string]: unknown } | null;
+  /** 消息时间戳（ISO-8601 UTC） */
+  timestamp: string;
+  /** epoch 毫秒副本（NUMERIC 索引字段；后端 Redis 8 结构已带，旧数据缺省为 undefined） */
+  tsEpochMs?: number;
+  /** 会话内自增序号（从 1 开始；搜索跳转/结果定位的地基，旧数据缺省为 undefined） */
+  seq?: number;
+}
+
+/** 搜索结果（API.md §2.4 SearchHit）：在 RemoteMessage 基础上增加高亮片段 */
+export interface SearchHit extends RemoteMessage {
+  /** 带高亮哨兵（⟦…⟧）的命中片段；未命中关键词时为 null */
+  highlight: string | null;
+}
+
+/** 后端会话摘要（API.md §2.5 ConversationBrief，GET /api/chat/conversations 的元素） */
+export interface ConversationBrief {
+  /** 已剥离 chat- 前缀，可直接用作其它接口的 sessionId 入参 */
+  sessionId: string;
+  /** 内部键 chat-xxx，仅用于展示/排查 */
+  conversationId: string;
+}
+
+/** 通用分页结构（对齐后端 PageResult<T>） */
+export interface RemotePage<T> {
+  records: T[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+/** POST /summarize 的响应体 */
+export interface SummarizeResult {
+  summarized: boolean;
+  sessionId: string;
+  /** summarized=true 时为摘要文本；false 时为空串 */
+  summary: string;
+}
 
 export const SUGGESTIONS: { icon: string; title: string; desc: string; ask: string }[] = [
   {

@@ -5,6 +5,7 @@ import { fmtClock } from '../lib/format';
 import { AgentOrb } from './Avatar';
 import { WaitingState } from './Thinking';
 import { EndNote, LiveUsage, ThinkingBlock, ToolCardList } from './LiveBlocks';
+import { SummaryCard } from './SummaryCard';
 import { IconUser } from './icons';
 
 function StatusBadge({ msg }: { msg: ChatMsg }) {
@@ -36,6 +37,11 @@ function StatusBadge({ msg }: { msg: ChatMsg }) {
 }
 
 export const MessageItem = memo(function MessageItem({ msg }: { msg: ChatMsg }) {
+  // 会话历史摘要卡：独立于 user/assistant 气泡的居中展示（role='system'）
+  if (msg.role === 'system') {
+    return <SummaryCard msg={msg} />;
+  }
+
   const isUser = msg.role === 'user';
   const isStreaming = msg.status === 'streaming';
   const hasLive = (msg.thinking?.length ?? 0) > 0 || (msg.toolCalls?.length ?? 0) > 0;
@@ -43,7 +49,7 @@ export const MessageItem = memo(function MessageItem({ msg }: { msg: ChatMsg }) 
   const hasError = !!msg.error && msg.status === 'error';
 
   return (
-    <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
+    <div className={`msg ${isUser ? 'user' : 'assistant'}`} data-seq={msg.seq ?? undefined}>
       {!isUser && (
         <div className="avatar">
           <AgentOrb pulse={isStreaming && msg.content === ''} />
@@ -58,7 +64,7 @@ export const MessageItem = memo(function MessageItem({ msg }: { msg: ChatMsg }) 
 
       <div className="msg-body">
         <div className="msg-meta">
-          {!isUser && <span style={{ fontWeight: 650, color: 'var(--ink-2)' }}>AgentDemo</span>}
+          {!isUser && <span style={{ fontWeight: 650, color: 'var(--ink-2)' }}>bobo</span>}
           <span>{fmtClock(msg.createdAt)}</span>
           <StatusBadge msg={msg} />
         </div>

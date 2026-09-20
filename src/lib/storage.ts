@@ -3,6 +3,8 @@ import { DEFAULT_SETTINGS } from '../types';
 
 const CONV_KEY = 'travel-agent.conversations.v1';
 const SETTINGS_KEY = 'travel-agent.settings.v1';
+/** 最近选中的会话 id（刷新后自动恢复，对应 FRONTEND_REQUIREMENTS.md §1.3 的 agent.currentSessionId） */
+const ACTIVE_SESSION_KEY = 'travel-agent.activeSessionId.v1';
 
 export function uid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -28,6 +30,23 @@ export function saveConversations(list: Conversation[]): void {
     localStorage.setItem(CONV_KEY, JSON.stringify(list));
   } catch {
     /* 存储满/隐私模式时忽略 */
+  }
+}
+
+export function saveActiveSessionId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(ACTIVE_SESSION_KEY, id);
+    else localStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadActiveSessionId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_SESSION_KEY);
+  } catch {
+    return null;
   }
 }
 

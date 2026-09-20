@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import type { Conversation } from '../types';
 import { fmtAgo } from '../lib/format';
 import { AgentOrb } from './Avatar';
-import { IconGear, IconPlus, IconTrash } from './icons';
+import { IconGear, IconHome, IconPlus, IconTrash } from './icons';
 
 interface Props {
   conversations: Conversation[];
@@ -13,8 +13,12 @@ interface Props {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  /** 打开会话记忆搜索面板（API.md §7.2 F5；演示模式无 Redis，入口隐藏） */
+  onOpenSearch?: () => void;
   onOpenSettings: () => void;
   onWidthChange?: (width: number) => void;
+  /** 回到开始页（Landing） */
+  onGoHome?: () => void;
 }
 
 const MIN_WIDTH = 200;
@@ -29,8 +33,10 @@ export default function Sidebar({
   onSelect,
   onNew,
   onDelete,
+  onOpenSearch,
   onOpenSettings,
   onWidthChange,
+  onGoHome,
 }: Props) {
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -66,7 +72,7 @@ export default function Sidebar({
         <AgentOrb size={32} />
         <div>
           <div className="sb-brand-name">
-            AgentDemo <span className="sb-badge">AGENT</span>
+            bobo <span className="sb-badge">AGENT</span>
           </div>
         </div>
       </div>
@@ -75,6 +81,8 @@ export default function Sidebar({
         <IconPlus size={16} />
         新建对话
       </button>
+
+      {/* 当前后端契约只提供流式对话；搜索记忆入口暂不展示，避免引导到旧接口。 */}
 
       {sorted.length > 0 && <div className="sb-list-label">最近会话</div>}
       <div className="sb-list dark-scroll">
@@ -103,13 +111,18 @@ export default function Sidebar({
       </div>
 
       <div className="sb-foot">
-        <span className={`sb-mode ${demoMode ? 'demo' : 'live'}`}>
-          <span className="dot" />
-          {demoMode ? '演示模式 · 本地模拟' : baseUrl ? `已连 ${hostOf(baseUrl)}` : '直连后端 · 同源'}
+          <span className={`sb-mode ${demoMode ? 'demo' : 'live'}`}>
+            <span className="dot" />
+            {demoMode ? '本地演示' : baseUrl ? `已连 ${hostOf(baseUrl)}` : 'Spring AI · 同源'}
         </span>
         <button className="icon-btn" onClick={onOpenSettings} title="设置" aria-label="设置">
           <IconGear size={16} />
         </button>
+        {onGoHome && (
+          <button className="icon-btn" onClick={onGoHome} title="回到首页" aria-label="回到首页">
+            <IconHome size={16} />
+          </button>
+        )}
       </div>
 
       <div className="sb-resizer" onMouseDown={startResize} title="拖动调整宽度" aria-label="拖动调整侧边栏宽度" />
