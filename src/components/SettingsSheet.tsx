@@ -1,24 +1,46 @@
 import { useEffect, useState } from 'react';
 import type { Settings } from '../types';
 import { probeBackend } from '../lib/api';
+import { getKeyStatus, logout, saveKeys, type AuthUser, type KeyStatus } from '../lib/auth';
 import { IconClose } from './icons';
 
 interface Props {
   settings: Settings;
   onChange: (s: Partial<Settings>) => void;
   onClose: () => void;
+  user: AuthUser | null;
+  onLoggedOut: () => void;
 }
 
 type CheckState = { kind: 'idle' | 'checking' | 'ok' | 'bad'; text?: string };
 
-export default function SettingsSheet({ settings, onChange, onClose }: Props) {
+export default function SettingsSheet({ settings, onChange, onClose, user, onLoggedOut }: Props) {
   const [urlText, setUrlText] = useState(settings.baseUrl);
   const [check, setCheck] = useState<CheckState>({ kind: 'idle' });
+  const [keys, setKeys] = useState({ qwen: '', tavily: '' });
+  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
+  const [keyMessage, setKeyMessage] = useState('');
 
   useEffect(() => {
     setUrlText(settings.baseUrl);
     setCheck({ kind: 'idle' });
   }, [settings.baseUrl]);
+
+  useEffect(() => {
+    if (!settings.demoMode && user) getKeyStatus(settings.baseUrl).then(setKeyStatus).catch(() => setKeyStatus(null));
+  }, [settings.baseUrl, settings.demoMode, user]);
+
+  const saveProviderKeys = async () => {
+    setKeyMessage('');
+    try {
+      await saveKeys(settings.baseUrl, keys.qwen, keys.tavily);
+      setKeys({ qwen: '', tavily: '' });
+      setKeyStatus(await getKeyStatus(settings.baseUrl));
+      setKeyMessage('已加密保存');
+    } catch (e) {
+      setKeyMessage(e instanceof Error ? e.message : '保存失败');
+    }
+  };
 
   const pickMode = (demoMode: boolean) => {
     onChange({ demoMode });
@@ -129,6 +151,24 @@ export default function SettingsSheet({ settings, onChange, onClose }: Props) {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {!settings.demoMode && user && (
+          <div className="set-sec">
+            <div className="set-sec-title">账号与模型密钥</div>
+            <div className="hint">当前账号：{user.username}。密钥只在后端加密保存，不会回显。</div>
+            <div className="field">
+              <label>Qwen API Key {keyStatus?.qwenConfigured ? '（已配置，留空保持不变）' : ''}</label>
+              <input type="password" value={keys.qwen} onChange={(e) => setKeys((v) => ({ ...v, qwen: e.target.value }))} autoComplete="off" />
+            </div>
+            <div className="field">
+              <label>Tavily API Key {keyStatus?.tavilyConfigured ? '（已配置，留空保持不变）' : ''}</label>
+              <input type="password" value={keys.tavily} onChange={(e) => setKeys((v) => ({ ...v, tavily: e.target.value }))} autoComplete="off" />
+            </div>
+            <button className="btn-ghost" onClick={() => void saveProviderKeys()}>保存模型密钥</button>
+            {keyMessage && <div className="check-line">{keyMessage}</div>}
+            <button className="btn-ghost" onClick={() => { void logout(settings.baseUrl).then(onLoggedOut); }}>退出登录</button>
           </div>
         )}
 

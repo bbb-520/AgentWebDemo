@@ -1388,6 +1388,25 @@ h4.md-h {
   color: var(--ink);
   transform: translateY(-1px);
 }
+.btn-primary {
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px 15px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  transition: all 0.16s var(--ease);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* ============ Toast ============ */
 .toasts {

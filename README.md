@@ -48,6 +48,11 @@ npm run build      # 产物在 dist/
 2. **同源部署（推荐）**：把 `dist/` 内容拷贝到后端 `src/main/resources/static/`，重启 Spring Boot 后直接访问 `http://localhost:18080/`；
 3. **直连**：在界面右上角「设置」里把 Base URL 填成后端地址，并把运行模式切到「直连后端」。当前后端已允许 localhost / 127.0.0.1 的跨源请求。
 
+### Netlify 部署
+
+将本目录连接到 Netlify，构建命令使用 `npm run build`，发布目录使用 `dist`，并设置环境变量
+`VITE_API_URL=https://你的后端公网地址` 后重新部署。`VITE_API_URL` 会在首次打开时自动启用直连后端模式。
+
 ## 运行模式
 
 - **演示模式（默认兜底）**：本地模拟智能体，不请求后端。会展示 `getWeather → getAttraction → 汇总` 的工具调用步骤与流式打字机效果，内置北京/上海/杭州/成都/广州/深圳/西安/厦门/重庆/三亚等城市示例数据，开箱即用。

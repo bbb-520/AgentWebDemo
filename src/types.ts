@@ -147,8 +147,9 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  baseUrl: '',
-  demoMode: true,
+  // Vite 在构建时注入公网后端地址；本地开发仍默认为同源/Vite 代理。
+  baseUrl: import.meta.env.VITE_API_URL ?? '',
+  demoMode: import.meta.env.VITE_API_URL ? false : true,
 };
 
 /* ---------- 后端会话记忆结构化消息（对齐 MessageWithConversation / PageResult） ----------

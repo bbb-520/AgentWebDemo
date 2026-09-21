@@ -7,6 +7,8 @@ import ChatArea from './components/ChatArea';
 import SettingsSheet from './components/SettingsSheet';
 import SearchSheet from './components/SearchSheet';
 import StartPage from './components/StartPage';
+import LoginSheet from './components/LoginSheet';
+import { getMe, type AuthUser } from './lib/auth';
 
 /** 两个页面：开始页（Landing）与聊天页，用 hash 路由（#chat）保持可分享/可后退 */
 type Page = 'start' | 'chat';
@@ -25,6 +27,8 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(288);
   const [page, setPage] = useState<Page>(pageFromHash);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
     const onPop = () => setPage(pageFromHash());
@@ -47,6 +51,12 @@ export default function App() {
 
   const { toasts, push, dismissToast } = useToasts();
   const { settings, updateSettings } = useSettings(push);
+
+  useEffect(() => {
+    if (settings.demoMode) { setUser(null); setAuthChecking(false); return; }
+    setAuthChecking(true);
+    getMe(settings.baseUrl).then(setUser).catch(() => setUser(null)).finally(() => setAuthChecking(false));
+  }, [settings.baseUrl, settings.demoMode]);
   const chat = useConversations({
     settings,
     notify: push,
@@ -125,9 +135,15 @@ export default function App() {
               settings={settings}
               onChange={updateSettings}
               onClose={() => setSettingsOpen(false)}
+              user={user}
+              onLoggedOut={() => setUser(null)}
             />
           )}
         </div>
+      )}
+
+      {!settings.demoMode && !authChecking && !user && (
+        <LoginSheet baseUrl={settings.baseUrl} onLoggedIn={setUser} />
       )}
 
       <div className="toasts">
