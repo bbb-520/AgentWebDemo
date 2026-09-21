@@ -27,13 +27,7 @@
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 （/api 已代理到 http://localhost:18080）
-```
-
-修改代理目标：
-
-```bash
-VITE_PROXY_TARGET=http://localhost:8080 npm run dev
+npm run dev        # http://localhost:5173（固定连接本地后端 http://localhost:18080）
 ```
 
 ## 构建与部署
@@ -42,22 +36,13 @@ VITE_PROXY_TARGET=http://localhost:8080 npm run dev
 npm run build      # 产物在 dist/
 ```
 
-三种接入方式：
-
-1. **开发联调**：跑 `vite dev`，`/api` 自动代理到 Java 后端，前后端不同端口也不会有 CORS 问题；
-2. **同源部署（推荐）**：把 `dist/` 内容拷贝到后端 `src/main/resources/static/`，重启 Spring Boot 后直接访问 `http://localhost:18080/`；
-3. **直连**：在界面右上角「设置」里把 Base URL 填成后端地址，并把运行模式切到「直连后端」。当前后端已允许 localhost / 127.0.0.1 的跨源请求。
-
-### Netlify 部署
-
-将本目录连接到 Netlify，构建命令使用 `npm run build`，发布目录使用 `dist`，并设置环境变量
-`VITE_API_URL=https://你的后端公网地址` 后重新部署。`VITE_API_URL` 会在首次打开时自动启用直连后端模式。
+开发时运行 Vite，`/api` 自动代理到本地 Java 后端；也可以直接把构建产物放入后端静态目录。
 
 ## 运行模式
 
 - **演示模式（默认兜底）**：本地模拟智能体，不请求后端。会展示 `getWeather → getAttraction → 汇总` 的工具调用步骤与流式打字机效果，内置北京/上海/杭州/成都/广州/深圳/西安/厦门/重庆/三亚等城市示例数据，开箱即用。
 - **直连后端**：对接真实 AgentDemo。工具调用由后端框架自动完成，前端仅展示文本增量；期间以「智能体运行中」状态动画过渡。
-- **首启自动识别**：浏览器从未保存过设置时，首次打开会探测一次 `GET /api/chat`。当前后端返回 405 即代表路由已就绪，前端会自动切到「直连后端」；不可达则保持演示模式。已保存过设置的用户不受影响，可在「设置」里手动切换并保存。
+- **本地后端地址固定**：前端始终请求 `http://localhost:18080`，无需配置环境变量或公网地址。
 
 ## 目录结构
 

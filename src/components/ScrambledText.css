@@ -1,0 +1,13 @@
+.scrambled-text {
+  display: inline-block;
+}
+
+.scrambled-text p {
+  margin: 0;
+}
+
+.scrambled-char {
+  display: inline-block;
+  min-width: 0.18em;
+  will-change: contents;
+}

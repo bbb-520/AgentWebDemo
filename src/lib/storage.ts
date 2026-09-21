@@ -6,14 +6,19 @@ const SETTINGS_KEY = 'travel-agent.settings.v1';
 /** 最近选中的会话 id（刷新后自动恢复，对应 FRONTEND_REQUIREMENTS.md §1.3 的 agent.currentSessionId） */
 const ACTIVE_SESSION_KEY = 'travel-agent.activeSessionId.v1';
 
+function scopedKey(key: string, scope = 'guest'): string {
+  const safe = scope.trim().toLowerCase().replace(/[^a-z0-9_.@-]/g, '_') || 'guest';
+  return `${key}.${safe}`;
+}
+
 export function uid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function loadConversations(): Conversation[] {
+export function loadConversations(scope = 'guest'): Conversation[] {
   try {
-    const raw = localStorage.getItem(CONV_KEY);
+    const raw = localStorage.getItem(scopedKey(CONV_KEY, scope));
     if (!raw) return [];
     const arr = JSON.parse(raw) as Conversation[];
     if (!Array.isArray(arr)) return [];
@@ -25,38 +30,29 @@ export function loadConversations(): Conversation[] {
   }
 }
 
-export function saveConversations(list: Conversation[]): void {
+export function saveConversations(list: Conversation[], scope = 'guest'): void {
   try {
-    localStorage.setItem(CONV_KEY, JSON.stringify(list));
+    localStorage.setItem(scopedKey(CONV_KEY, scope), JSON.stringify(list));
   } catch {
     /* 存储满/隐私模式时忽略 */
   }
 }
 
-export function saveActiveSessionId(id: string | null): void {
+export function saveActiveSessionId(id: string | null, scope = 'guest'): void {
   try {
-    if (id) localStorage.setItem(ACTIVE_SESSION_KEY, id);
-    else localStorage.removeItem(ACTIVE_SESSION_KEY);
+    const key = scopedKey(ACTIVE_SESSION_KEY, scope);
+    if (id) localStorage.setItem(key, id);
+    else localStorage.removeItem(key);
   } catch {
     /* ignore */
   }
 }
 
-export function loadActiveSessionId(): string | null {
+export function loadActiveSessionId(scope = 'guest'): string | null {
   try {
-    return localStorage.getItem(ACTIVE_SESSION_KEY);
+    return localStorage.getItem(scopedKey(ACTIVE_SESSION_KEY, scope));
   } catch {
     return null;
-  }
-}
-
-/** 用户是否曾经保存过设置（用于区分“首次启动”与“用户已主动选择过运行模式”） */
-export function hasSavedSettings(): boolean {
-  try {
-    return localStorage.getItem(SETTINGS_KEY) != null;
-  } catch {
-    // 存储不可用（隐私模式/被禁用）时视为“未知”，默认不做自动切换
-    return true;
   }
 }
 
@@ -66,7 +62,8 @@ export function loadSettings(): Settings {
     if (!raw) return { ...DEFAULT_SETTINGS };
     const s = JSON.parse(raw) as Partial<Settings>;
     return {
-      baseUrl: typeof s.baseUrl === 'string' ? s.baseUrl : DEFAULT_SETTINGS.baseUrl,
+      // 清理旧版本可能保存的公网地址，始终使用本地后端。
+      baseUrl: DEFAULT_SETTINGS.baseUrl,
       demoMode: typeof s.demoMode === 'boolean' ? s.demoMode : DEFAULT_SETTINGS.demoMode,
     };
   } catch {

@@ -147,9 +147,10 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  // Vite 在构建时注入公网后端地址；本地开发仍默认为同源/Vite 代理。
-  baseUrl: import.meta.env.VITE_API_URL ?? '',
-  demoMode: import.meta.env.VITE_API_URL ? false : true,
+  // 开发时走 Vite /api 代理，浏览器看到的是同源请求，HttpOnly 登录 Cookie
+  // 刷新后可以稳定回传；生产时由 Spring Boot 同源托管静态页。
+  baseUrl: '',
+  demoMode: false,
 };
 
 /* ---------- 后端会话记忆结构化消息（对齐 MessageWithConversation / PageResult） ----------

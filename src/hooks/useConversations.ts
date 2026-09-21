@@ -57,6 +57,7 @@ const CAF =
 
 interface UseConversationsOptions {
   settings: Settings;
+  accountScope?: string;
   notify: PushToast;
   openSettings: () => void;
 }
@@ -68,8 +69,9 @@ interface UseConversationsOptions {
  * 核心不变量（FRONTEND_REQUIREMENTS.md §1）：一个会话 = 一个 sessionId（uuid），
  * 只在「新建对话」时更换，刷新后自动恢复上次会话，同一时刻只允许一个在途请求。
  */
-export function useConversations({ settings, notify, openSettings }: UseConversationsOptions) {
-  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations());
+export function useConversations({ settings, accountScope = 'guest', notify, openSettings }: UseConversationsOptions) {
+  const [scope, setScope] = useState(accountScope || 'guest');
+  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations(accountScope || 'guest'));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyInfo | null>(null);
   const [summarizing, setSummarizing] = useState(false);
@@ -115,14 +117,28 @@ export function useConversations({ settings, notify, openSettings }: UseConversa
       persistReadyRef.current = true;
       return;
     }
-    const t = setTimeout(() => saveConversations(conversations), 260);
+    const t = setTimeout(() => saveConversations(conversations, scope), 260);
     return () => clearTimeout(t);
-  }, [conversations]);
+  }, [conversations, scope]);
+
+  useEffect(() => {
+    const nextScope = accountScope || 'guest';
+    if (nextScope === scope) return;
+    const nextConversations = loadConversations(nextScope);
+    setScope(nextScope);
+    setConversations(nextConversations);
+    setActiveId(null);
+    const last = loadActiveSessionId(nextScope);
+    if (last && nextConversations.some((c) => c.id === last)) {
+      setActiveId(last);
+      setHydrateTick((t) => t + 1);
+    }
+  }, [accountScope, scope]);
 
   /** 切换当前会话并记住（seed 预览会话不记，避免无 hash 场景误恢复演示数据） */
   const applyActive = (id: string) => {
     setActiveId(id);
-    if (!id.startsWith('seed')) saveActiveSessionId(id);
+    if (!id.startsWith('seed')) saveActiveSessionId(id, scope);
   };
 
   /* ---------- 启动：预览种子（#seed-demo）优先于自动恢复 ---------- */
@@ -200,13 +216,13 @@ export function useConversations({ settings, notify, openSettings }: UseConversa
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.location.hash.includes('seed-demo')) return;
-    const last = loadActiveSessionId();
+    const last = loadActiveSessionId(scope);
     if (!last || last.startsWith('seed')) return;
     if (!listRef.current.some((c) => c.id === last)) return;
     applyActive(last);
     setHydrateTick((t) => t + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [scope]);
 
   /* =====================================================================
    * 空会话恢复：选中（或自动恢复）一个「本地无消息」的会话时，从后端拉历史。
@@ -621,7 +637,7 @@ export function useConversations({ settings, notify, openSettings }: UseConversa
     setConversations((ls) => ls.filter((c) => c.id !== id));
     if (activeRef.current === id) {
       setActiveId(null);
-      saveActiveSessionId(null);
+      saveActiveSessionId(null, scope);
     }
   };
 

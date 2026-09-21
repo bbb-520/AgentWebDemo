@@ -1,0 +1,23 @@
+.pill-nav-container { position: absolute; top: 1em; z-index: 99; }
+.pill-nav { --nav-h: 42px; --pill-pad-x: 14px; --pill-gap: 3px; width: max-content; display: flex; align-items: center; box-sizing: border-box; }
+.pill-nav-items { position: relative; display: flex; align-items: center; height: var(--nav-h); background: var(--base, #000); border-radius: 9999px; }
+.pill-logo { width: var(--nav-h); height: var(--nav-h); margin-right: 4px; border-radius: 50%; background: var(--base, #000); padding: 8px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+.pill-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.pill-list { list-style: none; display: flex; align-items: stretch; gap: 6px; margin: 0; padding: 3px 5px; height: 100%; }
+.pill-list > li { display: flex; height: 100%; }
+.pill { display: inline-flex; align-items: center; justify-content: center; height: 100%; padding: 0 var(--pill-pad-x); background: var(--pill-bg, #fff); color: var(--pill-text, var(--base, #000)); text-decoration: none; border-radius: 9999px; box-sizing: border-box; font-weight: 650; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; position: relative; overflow: hidden; }
+.pill .hover-circle { position: absolute; left: 50%; bottom: 0; border-radius: 50%; background: var(--base, #000); z-index: 1; display: block; pointer-events: none; will-change: transform; }
+.pill .label-stack { position: relative; display: inline-block; line-height: 1; z-index: 2; }
+.pill .pill-label { position: relative; z-index: 2; display: inline-block; line-height: 1; will-change: transform; }
+.pill .pill-label-hover { position: absolute; left: 0; top: 0; color: var(--hover-text, #fff); z-index: 3; display: inline-block; will-change: transform, opacity; }
+.pill.is-active::after { display: none; }
+.desktop-only { display: block; }
+.mobile-only { display: none; }
+.mobile-menu-button { width: var(--nav-h); height: var(--nav-h); border-radius: 50%; background: var(--base, #000); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0; position: relative; }
+.hamburger-line { width: 16px; height: 2px; background: var(--pill-bg, #fff); border-radius: 1px; transform-origin: center; }
+.mobile-menu-popover { position: absolute; top: 3em; left: 1rem; right: 1rem; background: var(--base, #f0f0f0); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); z-index: 998; opacity: 0; transform-origin: top center; visibility: hidden; }
+.mobile-menu-list { list-style: none; margin: 0; padding: 3px; display: flex; flex-direction: column; gap: 3px; }
+.mobile-menu-popover .mobile-menu-link { display: block; padding: 12px 16px; color: var(--pill-text, #fff); background-color: var(--pill-bg, #fff); text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 50px; transition: all 0.2s ease; }
+.mobile-menu-popover .mobile-menu-link:hover, .mobile-menu-popover .mobile-menu-link.is-active { background-color: var(--base); color: var(--hover-text, #fff); }
+@media (max-width: 768px) { .pill-nav-container { width: 100%; left: 0; } .pill-nav { width: 100%; justify-content: space-between; padding: 0 1rem; background: transparent; } .desktop-only { display: none; } .mobile-only { display: flex; } .pill-logo { margin-right: 0; } .mobile-menu-popover { display: block; } }
+@media (prefers-reduced-motion: reduce) { .pill-logo, .pill, .mobile-menu-popover { transition: none; } }

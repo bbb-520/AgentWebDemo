@@ -4,7 +4,10 @@ import { SUGGESTIONS } from '../types';
 import { MessageItem } from './MessageItem';
 import EmptyState from './EmptyState';
 import Composer from './Composer';
-import { IconBroom, IconGear, IconMenu } from './icons';
+import { IconBroom, IconMenu } from './icons';
+import PillNav from './PillNav';
+import type { AuthUser } from '../lib/auth';
+import boboMark from '../assets/bobo-mark.svg';
 
 interface Props {
   title: string;
@@ -21,6 +24,10 @@ interface Props {
   /** 手动触发会话压缩（POST /api/chat/{sessionId}/summarize） */
   onSummarize?: () => void;
   onOpenSettings: () => void;
+  onOpenLogin: () => void;
+  onGoHome: () => void;
+  onOpenProfile: () => void;
+  user: AuthUser | null;
   onToggleNav: () => void;
   onSwitchToLive: () => void;
 }
@@ -37,6 +44,10 @@ export default function ChatArea({
   onClear,
   onSummarize,
   onOpenSettings,
+  onOpenLogin,
+  onGoHome,
+  onOpenProfile,
+  user,
   onToggleNav,
   onSwitchToLive,
 }: Props) {
@@ -88,9 +99,6 @@ export default function ChatArea({
         </button>
         <div className="topbar-title">
           <span>{title}</span>
-          <span className={`topbar-status ${demoMode ? 'demo' : 'live'}`}>
-            <i /> {demoMode ? '本地演示' : 'Spring AI'}
-          </span>
         </div>
         <button
           className="icon-btn light"
@@ -102,9 +110,22 @@ export default function ChatArea({
         >
           <IconBroom size={16} />
         </button>
-        <button className="icon-btn light" onClick={onOpenSettings} title="设置" aria-label="设置">
-          <IconGear size={16} />
-        </button>
+        <PillNav
+          logo={boboMark}
+          logoAlt="bobo"
+          items={[
+            { label: '首页', href: '#start', onClick: onGoHome },
+            { label: '设置', href: '#settings', onClick: onOpenSettings },
+            { label: user ? user.username : '登录', href: '#profile', onClick: user ? onOpenProfile : onOpenLogin },
+          ]}
+          activeHref="#profile"
+          ease="power2.out"
+          baseColor="#17171a"
+          pillColor="#fbfbfc"
+          hoveredPillTextColor="#ffffff"
+          pillTextColor="#17171a"
+          initialLoadAnimation={false}
+        />
       </header>
 
       <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>

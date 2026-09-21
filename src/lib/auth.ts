@@ -12,7 +12,12 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
 }
 
 export interface AuthUser { username: string; }
-export interface KeyStatus { qwenConfigured: boolean; tavilyConfigured: boolean; }
+export interface KeyStatus {
+  qwenConfigured: boolean;
+  tavilyConfigured: boolean;
+  qwenApiKey?: string | null;
+  tavilyApiKey?: string | null;
+}
 
 export function getMe(baseUrl: string): Promise<AuthUser> {
   return request<AuthUser>(baseUrl, '/api/auth/me');
@@ -42,4 +47,8 @@ export function saveKeys(baseUrl: string, qwenApiKey: string, tavilyApiKey: stri
   return request<void>(baseUrl, '/api/settings/keys', {
     method: 'PUT', body: JSON.stringify({ qwenApiKey, tavilyApiKey }),
   });
+}
+
+export function deleteKey(baseUrl: string, provider: 'qwen' | 'tavily'): Promise<void> {
+  return request<void>(baseUrl, `/api/settings/keys/${provider}`, { method: 'DELETE' });
 }

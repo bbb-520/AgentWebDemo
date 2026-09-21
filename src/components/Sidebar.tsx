@@ -7,8 +7,6 @@ import { IconGear, IconHome, IconPlus, IconTrash } from './icons';
 interface Props {
   conversations: Conversation[];
   activeId: string | null;
-  demoMode: boolean;
-  baseUrl: string;
   width: number;
   onSelect: (id: string) => void;
   onNew: () => void;
@@ -27,8 +25,6 @@ const MAX_WIDTH = 420;
 export default function Sidebar({
   conversations,
   activeId,
-  demoMode,
-  baseUrl,
   width,
   onSelect,
   onNew,
@@ -111,10 +107,6 @@ export default function Sidebar({
       </div>
 
       <div className="sb-foot">
-          <span className={`sb-mode ${demoMode ? 'demo' : 'live'}`}>
-            <span className="dot" />
-            {demoMode ? '本地演示' : baseUrl ? `已连 ${hostOf(baseUrl)}` : 'Spring AI · 同源'}
-        </span>
         <button className="icon-btn" onClick={onOpenSettings} title="设置" aria-label="设置">
           <IconGear size={16} />
         </button>
@@ -128,12 +120,4 @@ export default function Sidebar({
       <div className="sb-resizer" onMouseDown={startResize} title="拖动调整宽度" aria-label="拖动调整侧边栏宽度" />
     </aside>
   );
-}
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url.replace(/^https?:\/\//, '');
-  }
 }

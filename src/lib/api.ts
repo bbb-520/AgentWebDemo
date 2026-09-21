@@ -153,9 +153,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
       return { kind: 'done', message: '已停止' };
     }
     const url = apiUrl('/api/chat', baseUrl);
-    const tail = baseUrl
-      ? '（跨源直连可能被浏览器 CORS 拦截，Base URL 留空走 Vite /api 代理即可）'
-      : '（请求目标：本页同源 + Vite 代理 → http://localhost:18080）';
+    const tail = '（请确认本地 Spring Boot 后端已启动在 http://localhost:18080）';
     const msg =
       err instanceof TypeError
         ? `无法连接 ${url}${tail}`
@@ -179,6 +177,7 @@ export async function stopGeneration(sessionId: string, baseUrl: string): Promis
   try {
     const res = await fetch(apiUrl(`/api/chat/stop?sessionId=${encodeURIComponent(sessionId)}`, baseUrl), {
       method: 'POST',
+      credentials: 'include',
     });
     return res.ok;
   } catch {
@@ -191,6 +190,7 @@ export async function clearRemoteHistory(sessionId: string, baseUrl: string): Pr
   try {
     await fetch(apiUrl(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, baseUrl), {
       method: 'DELETE',
+      credentials: 'include',
     });
   } catch {
     /* 后端未启动时静默失败 */
@@ -200,7 +200,9 @@ export async function clearRemoteHistory(sessionId: string, baseUrl: string): Pr
 /** 拉取后端会话历史（每条形如 "我: ..." / "助手: ..."），失败返回空数组 */
 export async function fetchRemoteHistory(sessionId: string, baseUrl: string): Promise<string[]> {
   try {
-    const res = await fetch(apiUrl(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, baseUrl));
+    const res = await fetch(apiUrl(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, baseUrl), {
+      credentials: 'include',
+    });
     if (!res.ok) return [];
     const json = (await res.json()) as { history?: string[] };
     return json.history ?? [];
@@ -217,48 +219,6 @@ export async function fetchRemoteHistory(sessionId: string, baseUrl: string): Pr
  * GET /api/chat/history 请求，并对超时做兜底，用返回结构区分三种情况：
  * ok=true（HTTP 2xx）、ok=false+status（后端在但报错）、ok=false+status=0（不可达）。
  */
-export interface ProbeResult {
-  ok: boolean;
-  /** HTTP 状态码；网络层失败/超时为 0 */
-  status: number;
-  message: string;
-}
-
-export async function probeBackend(baseUrl: string, timeoutMs = 3000): Promise<ProbeResult> {
-  const controller = new AbortController();
-  const timer =
-    typeof setTimeout !== 'undefined'
-      ? setTimeout(() => controller.abort(), timeoutMs)
-      : undefined;
-  try {
-    // AgentDemo 目前只暴露 POST /api/chat。GET 会得到 405，但这已经证明
-    // Spring Boot 路由可达；避免用 POST 探测导致真实模型调用。
-    const res = await fetch(
-      apiUrl('/api/chat', baseUrl),
-      { method: 'GET', cache: 'no-store', signal: controller.signal },
-    );
-    const reachable = res.ok || res.status === 405;
-    return {
-      ok: reachable,
-      status: res.status,
-      message: reachable ? '后端可达，SSE 对话接口已就绪' : `后端返回 HTTP ${res.status}`,
-    };
-  } catch (err) {
-    const aborted = err instanceof DOMException && err.name === 'AbortError';
-    return {
-      ok: false,
-      status: 0,
-      message: aborted
-        ? `连接超时（>${timeoutMs}ms）`
-        : baseUrl.trim()
-          ? '无法连接：请确认后端已启动且地址无误'
-          : '无法连接（当前请求经 Vite 代理 /api → 后端 18080）',
-    };
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
 /* =====================================================================
  * 会话记忆二级存储接口（2026-09-07 后端新增，Redis 长期历史）
  * 契约见 FRONTEND_REQUIREMENTS.md §4.5 / §4.8 / §4.7
@@ -280,6 +240,7 @@ export async function fetchSessionMessagesPage(
     const qs = `?page=${Math.max(1, page | 0)}&size=${Math.max(1, size | 0)}`;
     const res = await fetch(
       apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/messages${qs}`, baseUrl),
+      { credentials: 'include' },
     );
     if (!res.ok) return null;
     const json = (await res.json()) as RemotePage<RemoteMessage>;
@@ -351,7 +312,7 @@ export async function requestSummarize(
   try {
     const res = await fetch(
       apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/summarize`, baseUrl),
-      { method: 'POST' },
+      { method: 'POST', credentials: 'include' },
     );
     if (!res.ok) return null;
     return (await res.json()) as SummarizeResult;
@@ -408,7 +369,9 @@ export async function searchMessages(
     qs.set('page', String(page));
     qs.set('size', String(size));
 
-    const res = await fetch(apiUrl(`/api/chat/search?${qs.toString()}`, baseUrl));
+    const res = await fetch(apiUrl(`/api/chat/search?${qs.toString()}`, baseUrl), {
+      credentials: 'include',
+    });
     if (!res.ok) return null;
     const json = (await res.json()) as RemotePage<SearchHit>;
     return json && Array.isArray(json.records) ? json : null;
@@ -424,7 +387,9 @@ export async function searchMessages(
  */
 export async function fetchRemoteConversations(baseUrl: string): Promise<ConversationBrief[]> {
   try {
-    const res = await fetch(apiUrl('/api/chat/conversations', baseUrl));
+    const res = await fetch(apiUrl('/api/chat/conversations', baseUrl), {
+      credentials: 'include',
+    });
     if (!res.ok) return [];
     const json = (await res.json()) as { total?: number; conversations?: ConversationBrief[] };
     const list = Array.isArray(json?.conversations) ? json.conversations : [];

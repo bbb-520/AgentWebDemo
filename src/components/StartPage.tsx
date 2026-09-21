@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import landingWallpaper from '../assets/landing-wallpaper.jpg';
 import ParticleText from './ParticleText';
+import ScrambledText from './ScrambledText';
+import DodgeField from './DodgeField';
+import PillNav from './PillNav';
+import boboMark from '../assets/bobo-mark.svg';
 
 interface Props {
   onStart: () => void;
-  demoMode: boolean;
+  onEnterOffline: () => void;
+  onOpenAbout: () => void;
 }
 
 const SUBTITLES = [
@@ -17,7 +22,7 @@ const SUBTITLES = [
  * 入口页参考 summerWeb-temp：暖色编辑感画布、固定导航、壁纸叠层、
  * 居中 Hero 和轻量的副标题轮播。进入聊天仍使用原有 hash 路由。
  */
-export default function StartPage({ onStart, demoMode }: Props) {
+export default function StartPage({ onStart, onEnterOffline, onOpenAbout }: Props) {
   const [leaving, setLeaving] = useState(false);
   const [subtitleIndex, setSubtitleIndex] = useState(0);
   const [typedSubtitle, setTypedSubtitle] = useState('');
@@ -28,6 +33,12 @@ export default function StartPage({ onStart, demoMode }: Props) {
     if (leaving) return;
     setLeaving(true);
     timer.current = window.setTimeout(onStart, 420);
+  };
+
+  const goOffline = () => {
+    if (leaving) return;
+    setLeaving(true);
+    timer.current = window.setTimeout(onEnterOffline, 420);
   };
 
   useEffect(
@@ -59,17 +70,16 @@ export default function StartPage({ onStart, demoMode }: Props) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        go();
-      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      event.preventDefault();
+      go();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
 
   return (
-    <div className={`start reference-landing${leaving ? ' leaving' : ''}`}>
+    <div className={`start reference-landing${leaving ? ' leaving' : ''}`} onClick={go}>
       <div className="start-wallpaper" aria-hidden="true">
         <img src={landingWallpaper} alt="" />
         <div className="start-wallpaper-wash" />
@@ -78,26 +88,56 @@ export default function StartPage({ onStart, demoMode }: Props) {
 
       <header className="start-nav">
         <button className="start-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <span className="start-brand-mark">✦</span>
+          <span className="start-brand-mark">
+            <img src={boboMark} alt="" />
+          </span>
           <span className="start-brand-name">bobo</span>
         </button>
 
-        <nav className="start-nav-center" aria-label="首页导航">
-          <span className="active">首页</span>
-          <span>能力</span>
-          <span>关于 bobo</span>
-        </nav>
+        <PillNav
+          className="start-pill-nav"
+          logo={boboMark}
+          logoAlt="bobo"
+          items={[
+            { label: '首页', href: '#home', onClick: () => undefined },
+            { label: '能力', href: '#capabilities', onClick: () => undefined },
+            { label: '关于bbb', href: '#about', onClick: onOpenAbout },
+          ]}
+          activeHref="#home"
+          ease="power2.out"
+          baseColor="#17171a"
+          pillColor="#fbfbfc"
+          hoveredPillTextColor="#ffffff"
+          pillTextColor="#17171a"
+        />
 
-        <button className="start-nav-link" onClick={go}>
-          进入工作台 <span aria-hidden="true">↗</span>
-        </button>
       </header>
 
       <main className="start-main">
-        <ParticleText text="bobo" />
+        <ParticleText text="bobo" highlightColor="#77777e" />
         <p className="start-desc start-typed" aria-live="polite">
           {typedSubtitle}<span className="start-cursor" aria-hidden="true">▊</span>
         </p>
+        <div className="start-cta-field" onClick={(event) => event.stopPropagation()}>
+          <DodgeField
+            className="start-dodge"
+            inkColor="#17171a"
+            contrastColor="#ffffff"
+            taunts={['Catch me', 'Nope', 'Almost', 'Too slow', 'Okay, okay']}
+            patience={6}
+            fieldHeight={174}
+            reach={92}
+            radius={174}
+            falloff={1.25}
+            wall="bounce"
+            onCatch={goOffline}
+          />
+        </div>
+        <div className="start-enter-hint">
+          <ScrambledText radius={130} duration={1.1} speed={0.55} scrambleChars=".:/\\" className="start-enter-scramble">
+            点击鼠标或按任意键进入
+          </ScrambledText>
+        </div>
       </main>
     </div>
   );

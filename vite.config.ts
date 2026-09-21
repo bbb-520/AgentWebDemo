@@ -1,13 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/**
- * 开发代理：把 /api 请求转发到 Java 后端(AgentDemo)。
- * 后端默认 8080，本项目实际常以 18080 启动；
- * 需要换地址时设置环境变量 VITE_PROXY_TARGET，例如：
- *   VITE_PROXY_TARGET=http://localhost:8080 npm run dev
- */
-const target = process.env.VITE_PROXY_TARGET || 'http://localhost:18080';
+/** 开发代理：把 /api 请求转发到本地 Java 后端。 */
+const target = 'http://localhost:18080';
 
 export default defineConfig({
   plugins: [react()],

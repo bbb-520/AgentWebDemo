@@ -7,14 +7,17 @@ import ChatArea from './components/ChatArea';
 import SettingsSheet from './components/SettingsSheet';
 import SearchSheet from './components/SearchSheet';
 import StartPage from './components/StartPage';
-import LoginSheet from './components/LoginSheet';
-import { getMe, type AuthUser } from './lib/auth';
+import { getKeyStatus, getMe, type AuthUser, type KeyStatus } from './lib/auth';
+import SetupGuide from './components/SetupGuide';
+import UserProfileSheet from './components/UserProfileSheet';
+import BoboWorld from './components/BoboWorld';
 
 /** 两个页面：开始页（Landing）与聊天页，用 hash 路由（#chat）保持可分享/可后退 */
-type Page = 'start' | 'chat';
+type Page = 'start' | 'chat' | 'settings' | 'about';
 
 function pageFromHash(): Page {
-  return window.location.hash.replace(/^#/, '') === 'chat' ? 'chat' : 'start';
+  const hash = window.location.hash.replace(/^#/, '');
+  return hash === 'chat' || hash === 'settings' || hash === 'about' ? hash : 'start';
 }
 
 /**
@@ -23,12 +26,15 @@ function pageFromHash(): Page {
  */
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(288);
   const [page, setPage] = useState<Page>(pageFromHash);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
+  const [setupDismissed, setSetupDismissed] = useState(false);
+  const [loginGuideOpen, setLoginGuideOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     const onPop = () => setPage(pageFromHash());
@@ -44,23 +50,63 @@ export default function App() {
     window.history.pushState(
       null,
       '',
-      next === 'chat' ? '#chat' : window.location.pathname + window.location.search,
+      next === 'chat' ? '#chat' : next === 'settings' ? '#settings' : next === 'about' ? '#about' : window.location.pathname + window.location.search,
     );
     setPage(next);
   };
 
   const { toasts, push, dismissToast } = useToasts();
-  const { settings, updateSettings } = useSettings(push);
+  const { settings, updateSettings } = useSettings();
+
+  const handleLoggedIn = async (nextUser: AuthUser) => {
+    setUser(nextUser);
+    const status = await getKeyStatus(settings.baseUrl).catch(() => null);
+    setKeyStatus(status);
+    if (status?.qwenConfigured && status.tavilyConfigured) {
+      updateSettings({ demoMode: false });
+      setSetupDismissed(true);
+      setLoginGuideOpen(false);
+    }
+  };
+
+  const handleKeysSaved = (status: KeyStatus) => {
+    setKeyStatus(status);
+    if (status.qwenConfigured && status.tavilyConfigured) {
+      updateSettings({ demoMode: false });
+      setSetupDismissed(true);
+      setLoginGuideOpen(false);
+    }
+  };
 
   useEffect(() => {
-    if (settings.demoMode) { setUser(null); setAuthChecking(false); return; }
     setAuthChecking(true);
-    getMe(settings.baseUrl).then(setUser).catch(() => setUser(null)).finally(() => setAuthChecking(false));
+    getMe(settings.baseUrl).then(setUser).catch(() => { setUser(null); setKeyStatus(null); }).finally(() => setAuthChecking(false));
   }, [settings.baseUrl, settings.demoMode]);
+
+  useEffect(() => {
+    if (!user) {
+      setKeyStatus(null);
+      return;
+    }
+    getKeyStatus(settings.baseUrl).then((status) => {
+      setKeyStatus(status);
+      if (status.qwenConfigured && status.tavilyConfigured && !settings.demoMode) setSetupDismissed(true);
+    }).catch(() => setKeyStatus(null));
+  }, [settings.baseUrl, settings.demoMode, user]);
+
+  const onlineReady = Boolean(user && keyStatus?.qwenConfigured && keyStatus?.tavilyConfigured);
+  const runtimeSettings = { ...settings, demoMode: settings.demoMode || !onlineReady };
+  const enterOfflineChat = () => {
+    updateSettings({ demoMode: true });
+    setSetupDismissed(true);
+    setLoginGuideOpen(false);
+    goto('chat');
+  };
   const chat = useConversations({
-    settings,
+    settings: runtimeSettings,
+    accountScope: user?.username ?? 'guest',
     notify: push,
-    openSettings: () => setSettingsOpen(true),
+    openSettings: () => goto('settings'),
   });
 
   const { conversations, activeId, busy, summarizing, jumpTarget } = chat;
@@ -75,15 +121,25 @@ export default function App() {
   return (
     <>
       {page === 'start' ? (
-        <StartPage onStart={() => goto('chat')} demoMode={settings.demoMode} />
+        <StartPage onStart={() => goto('chat')} onEnterOffline={enterOfflineChat} onOpenAbout={() => goto('about')} />
+      ) : page === 'about' ? (
+        <BoboWorld onBack={() => goto('start')} onStart={() => goto('chat')} />
+      ) : page === 'settings' ? (
+        <SettingsSheet
+          settings={settings}
+          onChange={updateSettings}
+          onClose={() => goto('chat')}
+          user={user}
+          onLoggedOut={() => { setUser(null); goto('chat'); }}
+          onNeedKeys={() => { goto('chat'); setLoginGuideOpen(true); }}
+          onKeysChanged={handleKeysSaved}
+        />
       ) : (
         <div className={`app${navOpen ? ' nav-open' : ''}`}>
           <div className="sidebar-mask" onClick={() => setNavOpen(false)} />
           <Sidebar
             conversations={conversations}
             activeId={activeId}
-            demoMode={settings.demoMode}
-            baseUrl={settings.baseUrl}
             width={sidebarWidth}
             onSelect={(id) => {
               chat.select(id);
@@ -95,7 +151,7 @@ export default function App() {
             }}
             onDelete={chat.removeConversation}
             onOpenSearch={() => setSearchOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => goto('settings')}
             onWidthChange={setSidebarWidth}
             onGoHome={() => goto('start')}
           />
@@ -103,14 +159,18 @@ export default function App() {
             title={title}
             messages={activeConv?.messages ?? []}
             busy={busy !== null}
-            demoMode={settings.demoMode}
+            demoMode={runtimeSettings.demoMode}
             summarizing={summarizing}
             jump={jumpTarget && jumpTarget.convId === activeId ? jumpTarget : null}
             onSend={chat.send}
             onStop={chat.stop}
             onClear={chat.clearContext}
             onSummarize={chat.summarizeActive}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => goto('settings')}
+            onOpenLogin={() => setLoginGuideOpen(true)}
+            onGoHome={() => goto('start')}
+            onOpenProfile={() => setProfileOpen(true)}
+            user={user}
             onToggleNav={() => setNavOpen((v) => !v)}
             onSwitchToLive={() => {
               updateSettings({ demoMode: false });
@@ -118,7 +178,7 @@ export default function App() {
             }}
           />
 
-          {searchOpen && !settings.demoMode && (
+          {searchOpen && !runtimeSettings.demoMode && (
             <SearchSheet
               demoMode={false}
               baseUrl={settings.baseUrl}
@@ -130,21 +190,34 @@ export default function App() {
             />
           )}
 
-          {settingsOpen && (
-            <SettingsSheet
-              settings={settings}
-              onChange={updateSettings}
-              onClose={() => setSettingsOpen(false)}
-              user={user}
-              onLoggedOut={() => setUser(null)}
-            />
-          )}
         </div>
       )}
 
-      {!settings.demoMode && !authChecking && !user && (
-        <LoginSheet baseUrl={settings.baseUrl} onLoggedIn={setUser} />
+      {page === 'chat' && !settings.demoMode && !authChecking && !setupDismissed && !onlineReady && (
+        <SetupGuide
+          baseUrl={settings.baseUrl}
+          user={user}
+          keyStatus={keyStatus}
+          onLoggedIn={(nextUser) => { void handleLoggedIn(nextUser); }}
+          onKeysSaved={handleKeysSaved}
+          onClose={() => setSetupDismissed(true)}
+          onUseOffline={() => { updateSettings({ demoMode: true }); setSetupDismissed(true); }}
+        />
       )}
+
+      {page === 'chat' && loginGuideOpen && (
+        <SetupGuide
+          baseUrl={settings.baseUrl}
+          user={user}
+          keyStatus={keyStatus}
+          onLoggedIn={(nextUser) => { void handleLoggedIn(nextUser); }}
+          onKeysSaved={handleKeysSaved}
+          onClose={() => setLoginGuideOpen(false)}
+          onUseOffline={() => { updateSettings({ demoMode: true }); setLoginGuideOpen(false); }}
+        />
+      )}
+
+      {profileOpen && <UserProfileSheet user={user} conversations={conversations} onClose={() => setProfileOpen(false)} />}
 
       <div className="toasts">
         {toasts.map((t) => (
