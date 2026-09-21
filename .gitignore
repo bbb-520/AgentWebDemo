@@ -6,3 +6,4 @@ npm-debug.log*
 .build-check*
 .bc*
 vite.config.ts.timestamp-*
+.workbuddy/
