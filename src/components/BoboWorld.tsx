@@ -5,15 +5,22 @@ import { photoArchivePhotos } from './photo-archive';
 import './bobo-world.css';
 
 type View = 'book' | 'ring' | 'cards' | 'atlas';
-type Photo = { src: string; alt: string };
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
-const photos: Photo[] = photoArchivePhotos.map(({ src, alt }) => ({ src, alt }));
+const photos = photoArchivePhotos;
+const views: View[] = ['book', 'ring', 'cards', 'atlas'];
+const viewMeta: Record<View, { label: string; title: string; description: string; hint: string }> = {
+  book: { label: '书册', title: '翻开一段时间', description: '打开封面，让照片按自己的节奏出现。', hint: '点击书册打开 · 方向键翻页' },
+  ring: { label: '环形', title: '围着记忆走一圈', description: '拖动环形相册，点击一张照片把它拉近。', hint: '拖动旋转 · 滚轮缩放' },
+  cards: { label: '卡片', title: '把瞬间摊开', description: '拖动时间轴，看照片从一叠卡片变成一条路。', hint: '拖动展开 · 点击卡片定位' },
+  atlas: { label: '星图', title: '寻找记忆的坐标', description: '每张照片都是一个坐标，拖动视野慢慢探索。', hint: '拖动旋转 · 滚轮缩放' },
+};
 
 function useSurfaceMotion(initial = 0) {
   const [rotation, setRotation] = useState(initial);
   const [zoom, setZoom] = useState(1);
   const drag = useRef<{ x: number; moved: boolean } | null>(null);
+  const clickBlocked = useRef(false);
   const frame = useRef<number | null>(null);
   const pending = useRef(0);
   const flush = () => { frame.current = null; setRotation((value) => value + pending.current); pending.current = 0; };
@@ -25,10 +32,11 @@ function useSurfaceMotion(initial = 0) {
     pending.current += dx * 0.24; drag.current.x = event.clientX;
     if (frame.current === null) frame.current = requestAnimationFrame(flush);
   };
-  const onUp = () => { drag.current = null; };
+  const onUp = () => { clickBlocked.current = Boolean(drag.current?.moved); drag.current = null; };
   const onWheel = (event: WheelEvent<HTMLDivElement>) => { event.preventDefault(); setZoom((value) => Math.max(0.72, Math.min(1.42, value - event.deltaY * 0.00075))); };
+  const canClick = () => { const allowed = !clickBlocked.current; clickBlocked.current = false; return allowed; };
   useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
-  return { rotation, zoom, drag, onDown, onMove, onUp, onWheel };
+  return { rotation, zoom, drag, onDown, onMove, onUp, onWheel, canClick };
 }
 
 function PhotoRing() {
@@ -36,24 +44,25 @@ function PhotoRing() {
   return <div className="gallery-surface photo-ring" onPointerDown={surface.onDown} onPointerMove={surface.onMove} onPointerUp={surface.onUp} onPointerCancel={surface.onUp} onWheel={surface.onWheel}>
     <div className="ring-halo" aria-hidden="true" />
     <div className="ring-items" style={{ '--rotation': `${surface.rotation}deg`, '--zoom': surface.zoom } as CSSVars}>
-      {photos.map((photo, index) => { const angle = index * (360 / photos.length); return <button type="button" aria-label={photo.alt} className={`ring-photo${index === active ? ' is-active' : ''}`} style={{ '--angle': `${angle}deg` } as CSSVars} key={photo.src} onClick={() => { if (!surface.drag.current?.moved) setActive(index); }}><img src={photo.src} alt={photo.alt} draggable={false} /></button>; })}
+      {photos.map((photo, index) => { const angle = index * (360 / photos.length); return <button type="button" aria-label={photo.alt} className={`ring-photo${index === active ? ' is-active' : ''}`} style={{ '--angle': `${angle}deg` } as CSSVars} key={photo.src} onClick={() => { if (surface.canClick()) setActive(index); }}><img src={photo.src} alt={photo.alt} draggable={false} /></button>; })}
     </div><span className="gallery-index" aria-live="polite">{String(active + 1).padStart(2, '0')}</span>
   </div>;
 }
 
 function CardCorridor() {
-  const surface = useSurfaceMotion(0); const [progress, setProgress] = useState(0.5);
+  const [progress, setProgress] = useState(0.5);
   const drag = useRef<{ x: number; moved: boolean } | null>(null);
+  const clickBlocked = useRef(false);
   const progressFrame = useRef<number | null>(null); const progressDelta = useRef(0);
   const updateProgress = (delta: number) => { progressDelta.current += delta; if (progressFrame.current !== null) return; progressFrame.current = requestAnimationFrame(() => { progressFrame.current = null; const deltaNow = progressDelta.current; progressDelta.current = 0; setProgress((value) => Math.max(0, Math.min(1, value + deltaNow))); }); };
   useEffect(() => () => { if (progressFrame.current !== null) cancelAnimationFrame(progressFrame.current); }, []);
   const onDown = (event: PointerEvent<HTMLDivElement>) => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, moved: false }; };
   const onMove = (event: PointerEvent<HTMLDivElement>) => { if (!drag.current) return; const dx = event.clientX - drag.current.x; if (Math.abs(dx) > 4) drag.current.moved = true; updateProgress(dx * 0.0018); drag.current.x = event.clientX; };
-  const onUp = () => { drag.current = null; };
+  const onUp = () => { clickBlocked.current = Boolean(drag.current?.moved); drag.current = null; };
   const onWheel = (event: WheelEvent<HTMLDivElement>) => { event.preventDefault(); updateProgress(event.deltaY * 0.00065); };
   return <div className="gallery-surface card-corridor" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}>
-    <div className="corridor-floor" aria-hidden="true" /><div className="corridor-items" style={{ '--zoom': surface.zoom } as CSSVars}>
-      {photos.map((photo, index) => { const center = (photos.length - 1) / 2; const offset = index - center; const spread = 230 * progress; const depth = (1 - progress) * (Math.abs(offset) * 78 + 80); const arc = Math.sin((index / (photos.length - 1)) * Math.PI) * (1 - progress) * -115; const tilt = offset * (1 - progress) * -13; return <button type="button" aria-label={photo.alt} className="corridor-card" key={photo.src} style={{ '--x': `${offset * spread}px`, '--y': `${arc}px`, '--z': `${-depth}px`, '--tilt': `${tilt}deg`, '--order': index } as CSSVars} onClick={() => !drag.current?.moved && setProgress(index / Math.max(1, photos.length - 1))}><img src={photo.src} alt={photo.alt} draggable={false} /></button>; })}
+    <div className="corridor-floor" aria-hidden="true" /><div className="corridor-items">
+      {photos.map((photo, index) => { const center = (photos.length - 1) / 2; const offset = index - center; const spread = 230 * progress; const depth = (1 - progress) * (Math.abs(offset) * 78 + 80); const arc = Math.sin((index / (photos.length - 1)) * Math.PI) * (1 - progress) * -115; const tilt = offset * (1 - progress) * -13; return <button type="button" aria-label={photo.alt} className="corridor-card" key={photo.src} style={{ '--x': `${offset * spread}px`, '--y': `${arc}px`, '--z': `${-depth}px`, '--tilt': `${tilt}deg`, '--order': index } as CSSVars} onClick={() => { if (!clickBlocked.current) setProgress(index / Math.max(1, photos.length - 1)); clickBlocked.current = false; }}><img src={photo.src} alt={photo.alt} draggable={false} /></button>; })}
     </div><span className="gallery-index" aria-hidden="true">{String(Math.round(progress * 99)).padStart(2, '0')}</span>
   </div>;
 }
@@ -76,10 +85,22 @@ function ModeIcon({ view }: { view: View }) {
 
 export default function BoboWorld({ onBack, onStart }: { onBack: () => void; onStart: () => void }) {
   const [view, setView] = useState<View>('book');
+  const meta = viewMeta[view];
   return <div className="bobo-world">
-    <header className="world-header"><button type="button" onClick={onBack} className="world-icon-button" aria-label="返回开始页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" /></svg></button><div className="world-mark" aria-hidden="true"><span /><span /><span /></div><button type="button" onClick={onStart} className="world-icon-button" aria-label="打开聊天"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 3z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg></button></header>
-    <nav className="world-dock" aria-label="相册视图">{(['book', 'ring', 'cards', 'atlas'] as View[]).map((item) => <button type="button" key={item} className={view === item ? 'is-active' : ''} onClick={() => setView(item)} aria-label={item}><ModeIcon view={item} /></button>)}</nav>
-    <main className="world-main">{view === 'book' ? <div className="world-book"><BoboFlipbook /></div> : view === 'ring' ? <PhotoRing /> : view === 'cards' ? <CardCorridor /> : <ImageAtlas />}</main>
-    <span className="world-live" aria-live="polite">{view}</span>
+    <header className="world-header">
+      <button type="button" onClick={onBack} className="world-icon-button" aria-label="返回开始页" title="返回开始页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" /></svg></button>
+      <div className="world-brand"><div className="world-mark" aria-hidden="true"><span /><span /><span /></div><div><strong>bobo</strong><small>记忆档案</small></div></div>
+      <button type="button" onClick={onStart} className="world-icon-button" aria-label="打开聊天" title="打开聊天"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 3z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg></button>
+    </header>
+    <nav className="world-dock" aria-label="相册视图">
+      {views.map((item, index) => <button type="button" key={item} className={view === item ? 'is-active' : ''} onClick={() => setView(item)} aria-label={`切换到${viewMeta[item].label}视图`} aria-pressed={view === item} data-label={viewMeta[item].label}><ModeIcon view={item} /><span>{String(index + 1).padStart(2, '0')}</span></button>)}
+    </nav>
+    <main className="world-main">
+      <div className="world-heading"><span>BOBO / {String(views.indexOf(view) + 1).padStart(2, '0')} — {meta.label}</span><h1>{meta.title}</h1><p>{meta.description}</p></div>
+      {view === 'book' ? <div className="world-book"><BoboFlipbook /></div> : view === 'ring' ? <PhotoRing /> : view === 'cards' ? <CardCorridor /> : <ImageAtlas />}
+      <div className="world-gesture"><i />{meta.hint}</div>
+    </main>
+    <div className="world-status"><span className="world-status-dot" />正在浏览 <b>{meta.label}</b><span className="world-status-count">{String(views.indexOf(view) + 1).padStart(2, '0')} / 04</span></div>
+    <span className="world-live" aria-live="polite">已切换到{meta.label}视图：{meta.title}</span>
   </div>;
 }
