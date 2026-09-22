@@ -1,23 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, WheelEvent } from 'react';
 import BoboFlipbook from './BoboFlipbook';
-import memory01 from '../assets/memory-01.jpg';
-import memory02 from '../assets/memory-02.jpg';
-import memory03 from '../assets/memory-03.jpg';
-import memory04 from '../assets/memory-04.jpg';
-import memory05 from '../assets/memory-05.jpg';
-import memory06 from '../assets/memory-06.jpg';
+import { photoArchivePhotos } from './photo-archive';
 import './bobo-world.css';
 
 type View = 'book' | 'ring' | 'cards' | 'atlas';
 type Photo = { src: string; alt: string };
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
-const photos: Photo[] = [
-  { src: memory01, alt: 'memory 01' }, { src: memory02, alt: 'memory 02' },
-  { src: memory03, alt: 'memory 03' }, { src: memory04, alt: 'memory 04' },
-  { src: memory05, alt: 'memory 05' }, { src: memory06, alt: 'memory 06' },
-];
+const photos: Photo[] = photoArchivePhotos.map(({ src, alt }) => ({ src, alt }));
 
 function useSurfaceMotion(initial = 0) {
   const [rotation, setRotation] = useState(initial);

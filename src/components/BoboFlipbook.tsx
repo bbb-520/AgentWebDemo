@@ -38,36 +38,12 @@ import {
   type PageTextures,
 } from "./photo-book-textures";
 import "./bobo-library.css";
-import memory01 from "../assets/memory-01.jpg";
-import memory02 from "../assets/memory-02.jpg";
-import memory03 from "../assets/memory-03.jpg";
-import memory04 from "../assets/memory-04.jpg";
-import memory05 from "../assets/memory-05.jpg";
-import memory06 from "../assets/memory-06.jpg";
+import { photoArchiveBook } from './photo-archive';
 
 type Phase = "library" | "opening" | "detail" | "closing" | "returning";
 type Point3 = [number, number, number];
 
-const localPhotoPages: PhotoBookPage[] = [
-  { id: "bobo-cover", image: memory01, alt: "Bobo memory cover", width: 5600, height: 4200, caption: "First light" },
-  { id: "bobo-02", image: memory02, alt: "A quiet corner from the photo archive", width: 5600, height: 4200, caption: "A quiet corner" },
-  { id: "bobo-03", image: memory03, alt: "A school corridor from the photo archive", width: 5600, height: 4200, caption: "Still on the way" },
-  { id: "bobo-04", image: memory04, alt: "A camera from the photo archive", width: 5600, height: 4200, caption: "The camera remembers" },
-  { id: "bobo-05", image: memory05, alt: "A small detail from the photo archive", width: 5600, height: 4200, caption: "Almost missed" },
-  { id: "bobo-06", image: memory06, alt: "A detail from the photo archive", width: 5600, height: 4200, caption: "Looking back" },
-];
-
-const books: LibraryBook[] = [{
-  id: "bobo-days",
-  title: "BOBO / DAYS",
-  spineMark: "B",
-  color: "#c8bda8",
-  ink: "#315b8f",
-  cover: memory01,
-  ratio: 0.75,
-  spineHeight: 68,
-  pages: localPhotoPages,
-}];
+const books: LibraryBook[] = [photoArchiveBook];
 
 const FOCUS_POSITION: Point3 = [0, 0.08, 0.3];
 const FOCUS_TILT = Math.PI / 5.2;
