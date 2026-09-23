@@ -38,12 +38,10 @@ import {
   type PageTextures,
 } from "./photo-book-textures";
 import "./bobo-library.css";
-import { photoArchiveBook } from './photo-archive';
+import { createPhotoArchiveBook, fetchPhotoArchive } from './photo-archive';
 
 type Phase = "library" | "opening" | "detail" | "closing" | "returning";
 type Point3 = [number, number, number];
-
-const books: LibraryBook[] = [photoArchiveBook];
 
 const FOCUS_POSITION: Point3 = [0, 0.08, 0.3];
 const FOCUS_TILT = Math.PI / 5.2;
@@ -258,14 +256,14 @@ function BookLoader({
   onLoaded,
 }: {
   book: LibraryBook | null;
-  onLoaded: (textures: PageTextures) => void;
+  onLoaded: (book: LibraryBook, textures: PageTextures) => void;
 }) {
   const gl = useThree((state) => state.gl);
   useEffect(() => {
     if (!book) return;
     let cancelled = false;
     warmBookTextures(book, gl, () => cancelled).then((textures) => {
-      if (!cancelled) onLoaded(textures);
+      if (!cancelled) onLoaded(book, textures);
     });
     return () => {
       cancelled = true;
@@ -356,6 +354,7 @@ function CameraRig({
 }
 
 function BookWorld({
+  books,
   activeBook,
   phase,
   page,
@@ -364,6 +363,7 @@ function BookWorld({
   onPage,
   onWarm,
 }: {
+  books: LibraryBook[];
   activeBook: LibraryBook | null;
   phase: Phase;
   page: number;
@@ -412,18 +412,52 @@ function BookWorld({
   );
 }
 
-export default function BoboFlipbook() {
+export default function BoboFlipbook({ book: suppliedBook }: { book?: LibraryBook } = {}) {
+  const [loadedBook, setLoadedBook] = useState<LibraryBook | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(!suppliedBook);
+  const [archiveError, setArchiveError] = useState('');
+  const books = useMemo(() => {
+    const active = suppliedBook ?? loadedBook;
+    return active ? [active] : [];
+  }, [loadedBook, suppliedBook]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("library");
   const [page, setPage] = useState(0);
   const [textures, setTextures] = useState<PageTextures | null>(null);
+  const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
   const timers = useRef<number[]>([]);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
 
+  useEffect(() => {
+    if (suppliedBook) {
+      setLoadedBook(suppliedBook);
+      setArchiveLoading(false);
+      setArchiveError('');
+      return;
+    }
+    const controller = new AbortController();
+    setArchiveLoading(true);
+    fetchPhotoArchive('', controller.signal)
+      .then((photos) => {
+        const archive = createPhotoArchiveBook(photos);
+        setLoadedBook(archive);
+        if (!archive) setArchiveError('“one and one/”中没有找到可显示的图片。');
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setArchiveError(error instanceof Error ? error.message : '读取 OSS 相册清单失败');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setArchiveLoading(false);
+      });
+    return () => controller.abort();
+  }, [suppliedBook]);
+
   const activeBook = useMemo(
     () => books.find((book) => book.id === activeId) ?? null,
-    [activeId],
+    [activeId, books],
   );
   const sheetCount = activeBook ? sheetCountOf(activeBook.pages) : 0;
   const readable = phase === "detail" && textures !== null;
@@ -444,6 +478,7 @@ export default function BoboFlipbook() {
       clearTimers();
       setPage(0);
       setTextures(null);
+      setFailedPhotos([]);
       setActiveId(book.id);
       setPhase("opening");
     },
@@ -452,11 +487,24 @@ export default function BoboFlipbook() {
 
   // Only an in-flight open may promote to the reader; if the reader backed out
   // first, the textures stay cached for next time and nothing pops in.
-  const handleLoaded = useCallback((loaded: PageTextures) => {
+  const handleLoaded = useCallback((book: LibraryBook, loaded: PageTextures) => {
     if (phaseRef.current !== "opening") return;
     setTextures(loaded);
+    const filenames = new Map(
+      book.pages.flatMap((leaf) => leaf.image ? [[leaf.image, leaf.sourceFilename ?? leaf.alt] as const] : []),
+    );
+    setFailedPhotos(
+      [...new Set((loaded.failedUrls ?? []).map((url) => filenames.get(url) ?? url))],
+    );
     setPhase("detail");
   }, []);
+
+  const retryFailedPhotos = useCallback(() => {
+    if (!activeBook || failedPhotos.length === 0) return;
+    setTextures(null);
+    setFailedPhotos([]);
+    setPhase("opening");
+  }, [activeBook, failedPhotos.length]);
 
   const startReturn = useCallback(() => {
     setPhase("returning");
@@ -516,6 +564,12 @@ export default function BoboFlipbook() {
             ? "Back cover"
             : `Spread ${String(page).padStart(2, "0")} / ${String(sheetCount - 1).padStart(2, "0")}`;
 
+  if (books.length === 0) {
+    return <div className="world-view-loading" role={archiveError ? 'alert' : undefined}>
+      {archiveError || (archiveLoading ? '正在读取 OSS 相册清单…' : '暂无可显示的相册图片。')}
+    </div>;
+  }
+
   return (
     <main className={`library-scene phase-${phase}`}>
       <Canvas
@@ -526,6 +580,7 @@ export default function BoboFlipbook() {
         aria-label="Floating photo book library"
       >
         <BookWorld
+          books={books}
           activeBook={activeBook}
           phase={phase}
           page={page}
@@ -573,7 +628,18 @@ export default function BoboFlipbook() {
           <button type="button" onClick={next} disabled={!readable || page === sheetCount} aria-label="Next spread">›</button>
         </footer>
       )}
+      {failedPhotos.length > 0 && phase === "detail" && (
+        <aside className="photo-load-warning" role="status" aria-live="polite" aria-atomic="true">
+          <span>{failedPhotos.length} 张照片暂时无法载入</span>
+          <details>
+            <summary>查看文件名</summary>
+            <ul>
+              {failedPhotos.map((filename) => <li key={filename}>{filename}</li>)}
+            </ul>
+          </details>
+          <button type="button" onClick={retryFailedPhotos}>重试</button>
+        </aside>
+      )}
     </main>
   );
 }
-

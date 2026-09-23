@@ -19,7 +19,7 @@ const MAX_EDGE = 1024;
  *  the decoded bitmap be used as-is with no resampling pass. */
 const RATIO_TOLERANCE = 0.012;
 
-export type PageTextures = Map<string, Texture>;
+export type PageTextures = Map<string, Texture> & { failedUrls?: string[] };
 type DecodedImage = ImageBitmap | HTMLImageElement;
 
 const cache = new Map<string, Texture>();
@@ -76,6 +76,7 @@ async function decode(url: string): Promise<DecodedImage> {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.decoding = "async";
+    image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Could not load ${url}`));
     image.src = url;
@@ -143,6 +144,7 @@ export function loadPageTexture(url: string, pageRatio: number, sourceRatio?: nu
 
 export async function loadPagesTextures(pages: PhotoBookPage[], pageRatio: number, cover?: string) {
   const wanted = new Map<string, number | undefined>();
+  const failedUrls: string[] = [];
   if (cover) wanted.set(cover, undefined);
   for (const page of pages) {
     if (page.image && !wanted.has(page.image)) wanted.set(page.image, declaredRatio(page));
@@ -151,13 +153,17 @@ export async function loadPagesTextures(pages: PhotoBookPage[], pageRatio: numbe
     [...wanted].map(async ([url, sourceRatio]) => {
       try {
         return [url, await loadPageTexture(url, pageRatio, sourceRatio)] as const;
-      } catch {
+      } catch (error) {
         // A missing leaf degrades to blank paper instead of wedging the open.
+        failedUrls.push(url);
+        console.warn("Photo book image could not be loaded:", url, error);
         return [url, paperTexture()] as const;
       }
     }),
   );
-  return new Map(entries) as PageTextures;
+  const textures = new Map(entries) as PageTextures;
+  textures.failedUrls = failedUrls;
+  return textures;
 }
 
 export const loadBookTextures = (book: LibraryBook) =>
@@ -182,12 +188,19 @@ export async function warmBookTextures(
   aborted: () => boolean,
 ) {
   const textures = await loadBookTextures(book);
-  for (const texture of textures.values()) {
+  for (const [url, texture] of textures) {
     if (aborted()) return textures;
     // Already resident from an earlier open: reopening should be instant.
     if (uploaded.has(texture)) continue;
-    gl.initTexture(texture);
-    uploaded.add(texture);
+    try {
+      gl.initTexture(texture);
+      uploaded.add(texture);
+    } catch (error) {
+      console.warn("Photo book texture could not be uploaded:", url, error);
+      cache.delete(cacheKey(url, book.ratio));
+      textures.set(url, paperTexture());
+      textures.failedUrls = [...new Set([...(textures.failedUrls ?? []), url])];
+    }
     await nextFrame();
   }
   return textures;

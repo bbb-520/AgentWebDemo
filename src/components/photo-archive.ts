@@ -1,78 +1,73 @@
 import type { LibraryBook, PhotoBookPage } from './photo-book-pages';
+import { apiUrl } from '../lib/api';
 
-/**
- * 私人相册 —— 图片存放在 OSS 私有 Bucket 的 one-and-one/ 前缀。
- * 浏览器通过同源 API 获取短期签名 URL，本地仓库不再保存照片副本。
- */
-export const photoArchiveFiles = [
-  'IMG_20260922_102029.jpg',
-  'IMG_20260922_102100.jpg',
-  'IMG_20260922_102131.jpg',
-  'IMG_20260922_102236.jpg',
-  'IMG_20260922_102433.jpg',
-  'IMG_20260922_102943.jpg',
-  'IMG_20260922_103043.jpg',
-  'IMG_20260922_103059.jpg',
-  'IMG_20260922_103443.jpg',
-  'IMG_20260922_103646.jpg',
-  'IMG_20260922_103750.jpg',
-  'IMG_20260922_103905.jpg',
-  'IMG_20260922_104045.jpg',
-  'IMG_20260922_104339.jpg',
-  'IMG_20260922_104419.jpg',
-  'IMG_20260922_104632.jpg',
-  'IMG_20260922_104722.jpg',
-  'IMG_20260922_105132.jpg',
-  'IMG_20260922_105202.jpg',
-  'IMG_20260922_105721.jpg',
-  'IMG_20260922_105740.jpg',
-  'mmexport1784605490401.jpg',
-  'Screenshot_20260815_010351_com.ss.android.ugc.aweme_edit_88731596892709.jpg',
-  'Screenshot_20260907_145608.jpg',
-  'one-and-one-25-classroom.jpg',
-  'one-and-one-26-kitten-kiss.jpg',
-  'one-and-one-27-confetti-night.jpg',
-  'one-and-one-28-gym-mirror.jpg',
-  'one-and-one-29-old-camera-screen.jpg',
-  'one-and-one-30-kitten-bed.jpg',
-  'one-and-one-31-game-farm.jpg',
-] as const;
-
-const photoArchiveAlt: Partial<Record<(typeof photoArchiveFiles)[number], string>> = {
-  'one-and-one-25-classroom.jpg': '旧教室的光线与黑板',
-  'one-and-one-26-kitten-kiss.jpg': '被轻轻亲吻的小猫',
-  'one-and-one-27-confetti-night.jpg': '夜空里落下的彩纸',
-  'one-and-one-28-gym-mirror.jpg': '健身房镜子里的身影',
-  'one-and-one-29-old-camera-screen.jpg': '旧相机里的日期画面',
-  'one-and-one-30-kitten-bed.jpg': '床上的小猫',
-  'one-and-one-31-game-farm.jpg': '像素游戏里的农场',
+export type PhotoArchivePhoto = {
+  src: string;
+  alt: string;
+  filename: string;
 };
 
-export const photoArchivePhotos = photoArchiveFiles.map((file, index) => ({
-  src: `/api/photo-archive/${encodeURIComponent(file)}`,
-  alt: photoArchiveAlt[file] ?? `私人相册照片 ${String(index + 1).padStart(2, '0')}`,
-  filename: file,
-}));
+type ArchiveObject = {
+  filename: string;
+  size: number;
+};
 
-export const photoArchivePages: PhotoBookPage[] = photoArchivePhotos.map((photo, index) => {
-  return {
+const OSS_IMAGE_PROCESS_LIMIT = 20 * 1024 * 1024;
+
+/** Read the actual image objects under the backend-configured OSS archive prefix. */
+export async function fetchPhotoArchive(baseUrl = '', signal?: AbortSignal): Promise<PhotoArchivePhoto[]> {
+  const response = await fetch(apiUrl('/api/photo-archive', baseUrl), {
+    headers: { Accept: 'application/json' },
+    signal,
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) throw new Error('相册清单格式无效');
+
+  const objects = payload.filter((item): item is ArchiveObject => {
+    if (!item || typeof item !== 'object') return false;
+    const candidate = item as Partial<ArchiveObject>;
+    return typeof candidate.filename === 'string'
+      && candidate.filename.length > 0
+      && typeof candidate.size === 'number'
+      && Number.isFinite(candidate.size)
+      && candidate.size >= 0;
+  });
+
+  return objects.map(({ filename, size }, index) => {
+    const path = `/api/photo-archive/${encodeURIComponent(filename)}`;
+    // OSS image processing rejects source objects over 20 MiB. Request those
+    // directly instead of leaving a permanently broken page in the album.
+    const src = size >= OSS_IMAGE_PROCESS_LIMIT ? `${path}?original=true` : path;
+    return {
+      src,
+      alt: `私人相册照片 ${String(index + 1).padStart(2, '0')}`,
+      filename,
+    };
+  });
+}
+
+export function createPhotoArchiveBook(photos: PhotoArchivePhoto[]): LibraryBook | null {
+  if (photos.length === 0) return null;
+
+  const pages: PhotoBookPage[] = photos.map((photo, index) => ({
     id: `photo-archive-${index + 1}`,
     image: photo.src,
     alt: photo.alt,
     sourceFilename: photo.filename,
     caption: `PHOTO ARCHIVE · ${String(index + 1).padStart(2, '0')}`,
-  };
-});
+  }));
 
-/** 统一为偏窄的纸张比例，方形照片在纸张色留白中完整呈现。 */
-export const photoArchiveBook: LibraryBook = {
-  id: 'photo-archive',
-  title: 'ONE AND ONE / PHOTO ARCHIVE',
-  spineMark: '相册',
-  color: '#c8bda8',
-  ink: '#315b8f',
-  cover: photoArchivePhotos[0].src,
-  ratio: 0.75,
-  spineHeight: 68,
-  pages: photoArchivePages,
-};
+  return {
+    id: 'photo-archive',
+    title: 'ONE AND ONE / PHOTO ARCHIVE',
+    spineMark: '相册',
+    color: '#c8bda8',
+    ink: '#315b8f',
+    cover: photos[0].src,
+    ratio: 0.75,
+    spineHeight: 68,
+    pages,
+  };
+}

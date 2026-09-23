@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useConversations } from './hooks/useConversations';
 import { useSettings } from './hooks/useSettings';
 import { useToasts } from './hooks/useToasts';
@@ -10,7 +10,7 @@ import StartPage from './components/StartPage';
 import { getKeyStatus, getMe, type AuthUser, type KeyStatus } from './lib/auth';
 import SetupGuide from './components/SetupGuide';
 import UserProfileSheet from './components/UserProfileSheet';
-import BoboWorld from './components/BoboWorld';
+const BoboWorld = lazy(() => import('./components/BoboWorld'));
 
 /** 两个页面：开始页（Landing）与聊天页，用 hash 路由（#chat）保持可分享/可后退 */
 type Page = 'start' | 'chat' | 'settings' | 'about';
@@ -121,7 +121,9 @@ export default function App() {
       {page === 'start' ? (
         <StartPage onStart={() => goto('chat')} onEnterOffline={enterOfflineChat} onOpenAbout={() => goto('about')} />
       ) : page === 'about' ? (
-        <BoboWorld onBack={() => goto('start')} onStart={() => goto('chat')} baseUrl={settings.baseUrl} signedIn={Boolean(user)} />
+        <Suspense fallback={<div className="world-loading">正在打开记忆档案…</div>}>
+          <BoboWorld onBack={() => goto('start')} onStart={() => goto('chat')} baseUrl={settings.baseUrl} signedIn={Boolean(user)} />
+        </Suspense>
       ) : page === 'settings' ? (
         <SettingsSheet
           settings={settings}
