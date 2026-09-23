@@ -32,7 +32,16 @@ export function loadConversations(scope = 'guest'): Conversation[] {
 
 export function saveConversations(list: Conversation[], scope = 'guest'): void {
   try {
-    localStorage.setItem(scopedKey(CONV_KEY, scope), JSON.stringify(list));
+    // OSS 结果地址是短期签名 URL：不把它持久化，刷新时由后端重新签发，
+    // 避免把过期地址留在 localStorage，也避免把可访问链接长期留在本地。
+    const snapshot = list.map((conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((message) => ({
+        ...message,
+        imageJobs: message.imageJobs?.map(({ imageUrl: _imageUrl, ...job }) => job),
+      })),
+    }));
+    localStorage.setItem(scopedKey(CONV_KEY, scope), JSON.stringify(snapshot));
   } catch {
     /* 存储满/隐私模式时忽略 */
   }

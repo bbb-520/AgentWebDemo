@@ -1,0 +1,16 @@
+.image-job-card { width: min(100%, 520px); margin-top: 14px; padding: 12px; border: 1px solid rgba(31, 39, 35, .16); background: #e6e0d2; color: #233027; box-shadow: 10px 12px 0 rgba(38, 46, 39, .09); }
+.image-job-topline, .image-job-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: rgba(35, 48, 39, .58); font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; }
+.image-job-status { display: inline-flex; align-items: center; gap: 6px; color: #657b54; letter-spacing: 0; }
+.image-job-status i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.image-job-processing .image-job-status i, .image-job-queued .image-job-status i { animation: image-job-pulse 1.4s ease-in-out infinite; }
+.image-job-result { position: relative; display: block; margin-top: 10px; overflow: hidden; color: #f9f6ef; background: #27342c; text-decoration: none; }
+.image-job-result img { display: block; width: 100%; max-height: 590px; object-fit: contain; background: #d6d0c1; }
+.image-job-result span { position: absolute; right: 10px; bottom: 9px; padding: 5px 7px; color: #f6f2e9; background: rgba(17, 23, 19, .68); font-size: 11px; }
+.image-job-pending { display: flex; align-items: center; gap: 18px; min-height: 126px; margin-top: 10px; padding: 18px; background: linear-gradient(120deg, #c6cabb, #ebe5d8); }
+.image-job-scan { width: 78px; height: 92px; flex: 0 0 auto; border: 1px solid rgba(35, 48, 39, .2); background: repeating-linear-gradient(0deg, transparent 0 11px, rgba(35, 48, 39, .18) 12px 13px), linear-gradient(135deg, rgba(255,255,255,.62), rgba(144,157,139,.28)); transform: rotate(-5deg); }
+.image-job-pending strong { display: block; font: 17px/1.2 Georgia, serif; letter-spacing: -.03em; }
+.image-job-pending p, .image-job-rationale { margin: 6px 0 0; color: rgba(35, 48, 39, .66); font-size: 12px; line-height: 1.65; }
+.image-job-rationale { padding: 9px 2px 2px; }
+.image-job-foot { justify-content: flex-start; margin-top: 12px; padding-top: 9px; border-top: 1px solid rgba(31, 39, 35, .12); letter-spacing: .03em; }
+@keyframes image-job-pulse { 0%, 100% { opacity: .3; transform: scale(.7); } 50% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .image-job-processing .image-job-status i, .image-job-queued .image-job-status i { animation: none; } }

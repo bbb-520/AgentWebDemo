@@ -1,10 +1,10 @@
-import { useRef, type KeyboardEvent, type CompositionEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type CompositionEvent } from 'react';
 import { IconSend, IconStop } from './icons';
 
 interface Props {
   value: string;
   onChange: (v: string) => void;
-  onSend: () => void;
+  onSend: (file?: File) => void;
   onStop: () => void;
   running: boolean;
   demoMode: boolean;
@@ -12,7 +12,27 @@ interface Props {
 
 export default function Composer({ value, onChange, onSend, onStop, running, demoMode }: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const chooseFile = (next: File | undefined) => {
+    if (!next) return;
+    if (!next.type.startsWith('image/')) return;
+    if (next.size > 20 * 1024 * 1024) return;
+    setFile(next);
+  };
 
   const autoGrow = () => {
     const ta = taRef.current;
@@ -24,10 +44,11 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
   const submit = () => {
     if (running) return;
     const v = value.trim();
-    if (!v) return;
+    if (!v && !file) return;
     onChange('');
     requestAnimationFrame(() => taRef.current && (taRef.current.style.height = 'auto'));
-    onSend();
+    onSend(file ?? undefined);
+    setFile(null);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -48,12 +69,26 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
 
   return (
     <div className="composer-wrap">
-      <div className="composer-inner">
+      <div
+        className="composer-inner"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          chooseFile(event.dataTransfer.files?.[0]);
+        }}
+      >
+        {file && (
+          <div className="composer-attachment" title={file.name}>
+            {previewUrl && <img src={previewUrl} alt="待上传图片预览" />}
+            <span>{file.name.length > 22 ? `${file.name.slice(0, 20)}…` : file.name}</span>
+            <button type="button" onClick={() => setFile(null)} aria-label="移除图片">×</button>
+          </div>
+        )}
         <textarea
           ref={taRef}
           rows={1}
           value={value}
-          placeholder={running ? '智能体正在回答…' : '问天气、要推荐，或让我帮你规划一段行程…'}
+          placeholder={running ? '图片任务正在后台运行…' : '上传照片，再说说你想怎样重新创作…'}
           onChange={(e) => {
             onChange(e.target.value);
             autoGrow();
@@ -61,6 +96,10 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
           onKeyDown={onKeyDown}
           onCompositionStart={onCompositionStart}
           onCompositionEnd={onCompositionEnd}
+          onPaste={(event) => {
+            const pasted = Array.from(event.clipboardData.files)[0];
+            if (pasted) chooseFile(pasted);
+          }}
           disabled={running}
         />
         <div className="composer-row">
@@ -70,6 +109,9 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
             ) : (
               <span style={{ color: 'var(--ok)' }}>● 直连后端</span>
             )}
+            <button type="button" className="attach-btn" onClick={() => fileRef.current?.click()} disabled={running}>
+              ＋ 图片
+            </button>
             <span>Enter 发送 · Shift+Enter 换行</span>
           </div>
           {running ? (
@@ -80,7 +122,7 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
             <button
               className="send-btn"
               onClick={submit}
-              disabled={!value.trim()}
+              disabled={!value.trim() && !file}
               title="发送"
               aria-label="发送"
             >
@@ -88,6 +130,16 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
             </button>
           )}
         </div>
+        <input
+          ref={fileRef}
+          className="visually-hidden"
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            chooseFile(event.target.files?.[0]);
+            event.currentTarget.value = '';
+          }}
+        />
       </div>
     </div>
   );

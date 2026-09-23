@@ -20,6 +20,8 @@ export const EVENT = {
   USAGE: 1009,
   /** 会话元信息：eventData 为 SessionInfoData，流内第一条事件 */
   SESSION_INFO: 1010,
+  /** 图片后台任务：eventData 为 ImageJobEventData */
+  IMAGE_JOB: 1011,
 } as const;
 
 /** SSE 中一条 `data:` 对应的原始结构：{"eventType":1001,"eventData":"..."} */
@@ -64,6 +66,34 @@ export interface UsageData {
 export interface SessionInfoData {
   conversationId: string;
   timestamp: number;
+}
+
+export type ImageJobStatus = 'QUEUED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'CANCELED' | 'EXPIRED';
+
+export interface ImageAttachment {
+  assetId: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+}
+
+export interface ImageJobEventData {
+  jobId: string;
+  status: ImageJobStatus;
+  mode?: string;
+  createdAt?: string;
+}
+
+export interface ImageJobRef {
+  jobId: string;
+  status: ImageJobStatus;
+  mode?: string;
+  prompt?: string;
+  createdAt?: string;
+  completedAt?: string | null;
+  imageUrl?: string | null;
+  rationale?: string | null;
+  error?: string | null;
 }
 
 export type Role = 'user' | 'assistant' | 'system';
@@ -128,6 +158,10 @@ export interface ChatMsg {
   finishedAt?: number;
   /** 后端 Redis 历史序号（从远端恢复/补拉时透传；用于搜索跳转 data-seq 定位，本地新消息为 undefined） */
   seq?: number;
+  /** 用户上传图片的元数据，不保存二进制或 data URL。 */
+  attachments?: ImageAttachment[];
+  /** 后台图片任务，仅保存任务 ID 和状态。 */
+  imageJobs?: ImageJobRef[];
 }
 
 /** 一个会话 = 一个后端 sessionId（记忆上下文），加上本地持久化的消息列表 */
@@ -221,27 +255,21 @@ export interface SummarizeResult {
 
 export const SUGGESTIONS: { icon: string; title: string; desc: string; ask: string }[] = [
   {
-    icon: '⛅',
-    title: '查天气',
-    desc: '北京今天天气怎么样？适不适合出门？',
-    ask: '北京今天天气怎么样？适不适合出门？',
+    icon: '✦',
+    title: '纸刊海报',
+    desc: '把照片做成一张安静的复古纸刊海报',
+    ask: '把这张照片做成一张安静的复古纸刊海报',
   },
   {
-    icon: '🗺️',
-    title: '推荐景点',
-    desc: '北京晴天适合去哪里玩，推荐 3 个景点',
-    ask: '北京晴天适合去哪里玩？推荐 3 个景点并说明理由',
+    icon: '◌',
+    title: '换一层气氛',
+    desc: '保留人物，把背景换成柔和的黄昏纸张',
+    ask: '保留人物和姿态，把背景换成柔和的黄昏纸张',
   },
   {
-    icon: '🧭',
-    title: '行程规划',
-    desc: '帮我规划一个杭州两日游的行程',
-    ask: '帮我规划一个杭州周末两日游的行程',
-  },
-  {
-    icon: '🏖️',
-    title: '穿衣建议',
-    desc: '去厦门前想了解天气和穿着建议',
-    ask: '去厦门前想了解天气，顺便给我一些穿着和出行建议',
+    icon: '⌁',
+    title: '提取情绪',
+    desc: '不保留原图，只提取照片的情绪和色彩',
+    ask: '不要保留原图，只提取这张照片的情绪和色彩重新创作',
   },
 ];

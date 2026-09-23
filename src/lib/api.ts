@@ -1,6 +1,8 @@
 import {
   type ChatEvent,
   type ConversationBrief,
+  type ImageAttachment,
+  type ImageJobRef,
   type RemoteMessage,
   type RemotePage,
   type Role,
@@ -23,6 +25,7 @@ export interface StreamChatOptions {
   sessionId: string;
   baseUrl: string;
   signal?: AbortSignal;
+  attachments?: ImageAttachment[];
   onEvent: (e: ChatEvent) => void;
   /**
    * 流空闲超时（单位 ms，默认 60000）：超过该时长未收到任何新数据视为连接挂起，
@@ -60,7 +63,7 @@ export function parseHistoryLine(line: string): { role: Role; content: string } 
  * 成败以「是否收到 1002 / 1004」为准，不能只看 HTTP 状态码。
  */
 export async function streamChat(opts: StreamChatOptions): Promise<StreamResult> {
-  const { question, sessionId, baseUrl, signal, onEvent } = opts;
+  const { question, sessionId, baseUrl, signal, onEvent, attachments } = opts;
   const controller = new AbortController();
   const onOuterAbort = () => controller.abort();
   if (signal) {
@@ -106,7 +109,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
     const res = await fetch(apiUrl('/api/chat', baseUrl), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ question, sessionId }),
+      body: JSON.stringify({ question, sessionId, attachments: attachments?.length ? attachments : undefined }),
       // AgentDemo 通过 HttpOnly 匿名 Cookie 绑定会话归属；直连模式同样需要带上它。
       credentials: 'include',
       signal: controller.signal,
@@ -164,6 +167,104 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
   } finally {
     clearIdle();
     if (signal) signal.removeEventListener('abort', onOuterAbort);
+  }
+}
+
+export interface UploadPolicyResponse {
+  assetId: string;
+  objectKey: string;
+  uploadUrl: string;
+  fields: Record<string, string>;
+  expiresAt: string;
+}
+
+export interface ImageJobView extends ImageJobRef {}
+
+/** 前端先拿短期 PostObject 策略，再把图片直接送到 OSS，不经过 Java 服务内存。 */
+export async function uploadImageAsset(file: File, baseUrl: string, signal?: AbortSignal): Promise<ImageAttachment> {
+  const policyResponse = await fetch(apiUrl('/api/image-assets/upload-policy', baseUrl), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    signal,
+    body: JSON.stringify({ fileName: file.name, contentType: file.type, fileSize: file.size }),
+  });
+  if (!policyResponse.ok) {
+    const message = await policyResponse.text().catch(() => '');
+    throw new Error(message || `获取图片上传策略失败（${policyResponse.status}）`);
+  }
+  const policy = (await policyResponse.json()) as UploadPolicyResponse;
+  const form = new FormData();
+  Object.entries(policy.fields).forEach(([key, value]) => form.append(key, value));
+  form.append('file', file, file.name);
+  let uploaded: Response;
+  try {
+    uploaded = await fetch(policy.uploadUrl, { method: 'POST', body: form, signal });
+  } catch (error) {
+    // 跨域上传被 OSS CORS 拦截时，浏览器通常只会返回 TypeError，
+    // DevTools 里常见表现是 OSS 请求 200 但响应体为 0 B。
+    if (error instanceof TypeError) {
+      throw new Error(
+        '图片上传被 OSS 跨域策略拦截，请在 Bucket CORS 中加入当前前端地址（例如 http://127.0.0.1:5176 和 http://localhost:5176）',
+      );
+    }
+    throw error;
+  }
+  if (!uploaded.ok) {
+    const message = await uploaded.text().catch(() => '');
+    throw new Error(message || `图片上传 OSS 失败（${uploaded.status}）`);
+  }
+
+  const completed = await fetch(apiUrl(`/api/image-assets/${encodeURIComponent(policy.assetId)}/complete`, baseUrl), {
+    method: 'POST',
+    credentials: 'include',
+    signal,
+  });
+  if (!completed.ok) throw new Error('OSS 图片校验失败，未能创建图片任务');
+  return {
+    assetId: policy.assetId,
+    fileName: file.name,
+    mimeType: file.type,
+    fileSize: file.size,
+  };
+}
+
+export async function fetchImageJob(jobId: string, baseUrl: string, signal?: AbortSignal): Promise<ImageJobView | null> {
+  try {
+    const response = await fetch(apiUrl(`/api/image-jobs/${encodeURIComponent(jobId)}`, baseUrl), {
+      credentials: 'include', signal,
+    });
+    if (!response.ok) return null;
+    const value = await response.json();
+    return value && typeof value.jobId === 'string' ? value as ImageJobView : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchConversationImageJobs(conversationId: string, baseUrl: string): Promise<ImageJobView[]> {
+  try {
+    const response = await fetch(apiUrl(`/api/image-jobs?conversationId=${encodeURIComponent(conversationId)}`, baseUrl), {
+      credentials: 'include',
+    });
+    if (!response.ok) return [];
+    const value = await response.json();
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchImageArchive(baseUrl: string, limit = 24): Promise<ImageJobView[]> {
+  try {
+    const response = await fetch(apiUrl(`/api/image-jobs/archive?limit=${Math.max(1, Math.min(50, limit))}`, baseUrl), {
+      credentials: 'include',
+    });
+    if (!response.ok) return [];
+    const value = await response.json();
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
   }
 }
 

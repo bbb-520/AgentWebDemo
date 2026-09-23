@@ -4,6 +4,9 @@ import type {
   ChatMsg,
   Conversation,
   EndReason,
+  ImageAttachment,
+  ImageJobEventData,
+  ImageJobRef,
   SessionInfoData,
   Settings,
   ToolCallFailedData,
@@ -20,6 +23,9 @@ import {
   requestSummarize,
   restoreSessionMessages,
   streamChat,
+  fetchConversationImageJobs,
+  fetchImageJob,
+  uploadImageAsset,
 } from '../lib/api';
 import { runMockAgent } from '../lib/mock';
 import { mergeRemoteMsgs, remoteToChatMsgs } from '../lib/remote';
@@ -90,6 +96,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const openSettingsRef = useRef(openSettings);
   const activeRunRef = useRef<ActiveRun | null>(null);
   const summarizeRef = useRef(false);
+  const imagePollersRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     listRef.current = conversations;
@@ -109,6 +116,11 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   useEffect(() => {
     openSettingsRef.current = openSettings;
   }, [openSettings]);
+
+  useEffect(() => () => {
+    imagePollersRef.current.forEach((timer) => window.clearInterval(timer));
+    imagePollersRef.current.clear();
+  }, []);
 
   /* ---------- 会话列表持久化（首帧跳过，后续防抖 260ms） ---------- */
   const persistReadyRef = useRef(false);
@@ -229,11 +241,11 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
    * 以 activeId / hydrateTick 为触发，重复点选同一空会话也能重试。
    * ===================================================================== */
   useEffect(() => {
-    if (!activeId) return;
+    if (!activeId || settingsRef.current.demoMode) return;
     const conv = listRef.current.find((c) => c.id === activeId);
-    if (!conv || conv.messages.length > 0) return;
-    if (settingsRef.current.demoMode) return;
-    void hydrateConv(activeId);
+    if (!conv) return;
+    if (conv.messages.length === 0) void hydrateConv(activeId);
+    void hydrateImageJobs(activeId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, hydrateTick]);
 
@@ -295,8 +307,64 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     notifyRef.current(`已从后端恢复 ${msgs.length} 条历史消息`);
   };
 
+  const patchJob = (convId: string, msgId: string, job: ImageJobRef) => {
+    setConversations((ls) => ls.map((c) => c.id !== convId ? c : {
+      ...c,
+      messages: c.messages.map((m) => m.id !== msgId ? m : {
+        ...m,
+        imageJobs: [...(m.imageJobs ?? []).filter((item) => item.jobId !== job.jobId), job],
+      }),
+    }));
+  };
+
+  const watchImageJob = (convId: string, msgId: string, jobId: string) => {
+    if (imagePollersRef.current.has(jobId)) return;
+    const tick = async () => {
+      const job = await fetchImageJob(jobId, settingsRef.current.baseUrl);
+      if (!job) return;
+      patchJob(convId, msgId, job);
+      if (job.status === 'SUCCEEDED' || job.status === 'FAILED' || job.status === 'CANCELED' || job.status === 'EXPIRED') {
+        const timer = imagePollersRef.current.get(jobId);
+        if (timer) window.clearInterval(timer);
+        imagePollersRef.current.delete(jobId);
+        if (job.status === 'SUCCEEDED') notifyRef.current('图片已生成，结果已回到当前对话');
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 3500);
+    imagePollersRef.current.set(jobId, timer);
+  };
+
+  const hydrateImageJobs = async (convId: string) => {
+    if (settingsRef.current.demoMode) return;
+    const jobs = await fetchConversationImageJobs(convId, settingsRef.current.baseUrl);
+    if (!jobs.length) return;
+    setConversations((ls) => ls.map((c) => {
+      if (c.id !== convId) return c;
+      const assistantIds = c.messages.filter((m) => m.role === 'assistant').map((m) => m.id);
+      const fallbackId = assistantIds[assistantIds.length - 1];
+      const messages = c.messages.map((m) => m);
+      const target = fallbackId ? messages.findIndex((m) => m.id === fallbackId) : -1;
+      if (target >= 0) {
+        const fresh = new Map(jobs.map((job) => [job.jobId, job]));
+        const existing = messages[target].imageJobs ?? [];
+        messages[target] = {
+          ...messages[target],
+          // 后端返回的是新签发的短期 URL，同 ID 也要覆盖本地旧快照。
+          imageJobs: [
+            ...existing.map((job) => fresh.get(job.jobId) ?? job),
+            ...jobs.filter((job) => !existing.some((item) => item.jobId === job.jobId)),
+          ],
+        };
+      }
+      return { ...c, messages };
+    }));
+    const assistantId = listRef.current.find((c) => c.id === convId)?.messages.filter((m) => m.role === 'assistant').at(-1)?.id;
+    if (assistantId) jobs.filter((job) => job.status === 'QUEUED' || job.status === 'PROCESSING').forEach((job) => watchImageJob(convId, assistantId, job.jobId));
+  };
+
   /* ---------- 发送（含 SSE/Mock 统一状态机） ---------- */
-  const send = (raw: string) => {
+  const send = (raw: string, file?: File) => {
     const text = raw.trim();
     if (!text || busyRef.current) return;
 
@@ -308,7 +376,13 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     }
 
     const now = Date.now();
-    const userMsg: ChatMsg = { id: uid(), role: 'user', content: text, createdAt: now };
+    const userMsg: ChatMsg = {
+      id: uid(),
+      role: 'user',
+      content: text,
+      createdAt: now,
+      attachments: file ? [{ assetId: 'pending', fileName: file.name, mimeType: file.type, fileSize: file.size }] : undefined,
+    };
     const asstMsg: ChatMsg = {
       id: uid(),
       role: 'assistant',
@@ -360,6 +434,12 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
             : { ...c, messages: c.messages.map((m) => (m.id === asstId ? fn(m) : m)) },
         ),
       );
+
+    const patchUser = (attachment: ImageAttachment) =>
+      setConversations((ls) => ls.map((c) => c.id !== convId2 ? c : {
+        ...c,
+        messages: c.messages.map((m) => m.id === userMsg.id ? { ...m, attachments: [attachment] } : m),
+      }));
 
     /* --- DATA 增量：缓冲区 + rAF 节流提交 --- */
     let textBuf = '';
@@ -541,6 +621,15 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
         case EVENT.SESSION_INFO:
           setSessionInfo(e.eventData as SessionInfoData);
           break;
+        case EVENT.IMAGE_JOB: {
+          const d = e.eventData as ImageJobEventData | null;
+          if (d && typeof d.jobId === 'string' && d.jobId) {
+            const job: ImageJobRef = { jobId: d.jobId, status: d.status, mode: d.mode, createdAt: d.createdAt };
+            patchJob(convId2, asstId, job);
+            watchImageJob(convId2, asstId, d.jobId);
+          }
+          break;
+        }
         case EVENT.STOP:
           sawStop = true;
           finish(stopRequested ? 'stopped' : 'done', {
@@ -570,10 +659,24 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
         return;
       }
 
+      let uploadedAttachment: ImageAttachment | undefined;
+      if (file) {
+        addThinking('正在把照片安全上传到 OSS…');
+        try {
+          uploadedAttachment = await uploadImageAsset(file, settingsRef.current.baseUrl, controller.signal);
+          patchUser(uploadedAttachment);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '照片上传失败';
+          finish('error', { error: message, endReason: 'error' });
+          return;
+        }
+      }
+
       const res = await streamChat({
         question: text,
         sessionId: convId2, // 会话 id 即后端 sessionId，对话/停止/历史/清空统一携带
         baseUrl: settingsRef.current.baseUrl,
+        attachments: uploadedAttachment ? [uploadedAttachment] : undefined,
         signal: controller.signal,
         onEvent: onLiveEvent,
       });

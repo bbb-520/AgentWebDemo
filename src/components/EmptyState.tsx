@@ -5,8 +5,8 @@ export default function EmptyState({ onAsk }: { onAsk: (q: string) => void }) {
     <div className="empty-wrap">
       <div className="hero">
         <div className="hero-kicker"><span className="hero-kicker-dot" /> bobo</div>
-        <h1>今天想一起去哪里？</h1>
-        <p>从天气、灵感到完整行程，让我帮你把想法变成下一站。</p>
+        <h1>今天想让哪张照片继续生长？</h1>
+        <p>上传一张照片，再说说你想保留、改变或重新想象的部分。</p>
       </div>
       <div className="sugg-grid">
         {SUGGESTIONS.map((s) => (

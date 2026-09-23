@@ -61,11 +61,11 @@ async function decode(url: string): Promise<DecodedImage> {
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      // Three.js cannot apply Texture.flipY to ImageBitmap uploads. Flip while
-      // decoding so direct bitmap textures and canvas-fitted textures share
-      // the same upright UV orientation.
+      // Keep the source bitmap in its natural top-to-bottom orientation. The
+      // page material already uses Three's normal texture upload orientation;
+      // flipping here makes the photo appear upside down on the leaf.
       return await createImageBitmap(await response.blob(), {
-        imageOrientation: "flipY",
+        imageOrientation: "none",
         premultiplyAlpha: "none",
       });
     } catch {

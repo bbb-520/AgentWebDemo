@@ -1,59 +1,77 @@
 import type { LibraryBook, PhotoBookPage } from './photo-book-pages';
 
 /**
- * 私人相册 —— 图片来自 D:\photo（用户指定替换「关于bbb」页的全部照片）。
- * 网页版副本（最长边 2048 / JPEG q85 / EXIF 方向已烘焙）存放在
- * public/photo-archive，由脚本从原图生成；原图不进入仓库。
- * 文件名保持与原图一致，便于追溯。
+ * 私人相册 —— 图片存放在 OSS 私有 Bucket 的 one-and-one/ 前缀。
+ * 浏览器通过同源 API 获取短期签名 URL，本地仓库不再保存照片副本。
  */
 export const photoArchiveFiles = [
-  'IMG_20220604_224727.jpg', // 2022-06-04 · 横 4:3
-  '1721485740269.jpeg',      // 2024-07-20 · 横 4:3
-  'IMG_20250101_000042.jpg', // 2025-01-01 · 竖 3:4
-  'IMG_20250808_201231.jpg', // 2025-08-08 · 竖 3:4
-  'retouch_2026050913393991.jpg', // 2026-05-09 · 竖 3:4
-  'IMG_20260820_130824.jpg', // 2026-08-20 · 竖 3:4
-  'IMG_20260916_171149.jpg', // 2026-09-16 · 方 1:1
+  'IMG_20260922_102029.jpg',
+  'IMG_20260922_102100.jpg',
+  'IMG_20260922_102131.jpg',
+  'IMG_20260922_102236.jpg',
+  'IMG_20260922_102433.jpg',
+  'IMG_20260922_102943.jpg',
+  'IMG_20260922_103043.jpg',
+  'IMG_20260922_103059.jpg',
+  'IMG_20260922_103443.jpg',
+  'IMG_20260922_103646.jpg',
+  'IMG_20260922_103750.jpg',
+  'IMG_20260922_103905.jpg',
+  'IMG_20260922_104045.jpg',
+  'IMG_20260922_104339.jpg',
+  'IMG_20260922_104419.jpg',
+  'IMG_20260922_104632.jpg',
+  'IMG_20260922_104722.jpg',
+  'IMG_20260922_105132.jpg',
+  'IMG_20260922_105202.jpg',
+  'IMG_20260922_105721.jpg',
+  'IMG_20260922_105740.jpg',
+  'mmexport1784605490401.jpg',
+  'Screenshot_20260815_010351_com.ss.android.ugc.aweme_edit_88731596892709.jpg',
+  'Screenshot_20260907_145608.jpg',
+  'one-and-one-25-classroom.jpg',
+  'one-and-one-26-kitten-kiss.jpg',
+  'one-and-one-27-confetti-night.jpg',
+  'one-and-one-28-gym-mirror.jpg',
+  'one-and-one-29-old-camera-screen.jpg',
+  'one-and-one-30-kitten-bed.jpg',
+  'one-and-one-31-game-farm.jpg',
 ] as const;
 
-/** 与 photoArchiveFiles 一一对应的声明宽高（用于 3D 书页比例推导）。 */
-const photoArchiveDimensions: Record<(typeof photoArchiveFiles)[number], [number, number]> = {
-  'IMG_20220604_224727.jpg': [4, 3],
-  '1721485740269.jpeg': [4, 3],
-  'IMG_20250101_000042.jpg': [3, 4],
-  'IMG_20250808_201231.jpg': [3, 4],
-  'retouch_2026050913393991.jpg': [3, 4],
-  'IMG_20260820_130824.jpg': [3, 4],
-  'IMG_20260916_171149.jpg': [1, 1],
+const photoArchiveAlt: Partial<Record<(typeof photoArchiveFiles)[number], string>> = {
+  'one-and-one-25-classroom.jpg': '旧教室的光线与黑板',
+  'one-and-one-26-kitten-kiss.jpg': '被轻轻亲吻的小猫',
+  'one-and-one-27-confetti-night.jpg': '夜空里落下的彩纸',
+  'one-and-one-28-gym-mirror.jpg': '健身房镜子里的身影',
+  'one-and-one-29-old-camera-screen.jpg': '旧相机里的日期画面',
+  'one-and-one-30-kitten-bed.jpg': '床上的小猫',
+  'one-and-one-31-game-farm.jpg': '像素游戏里的农场',
 };
 
 export const photoArchivePhotos = photoArchiveFiles.map((file, index) => ({
-  src: `/photo-archive/${encodeURIComponent(file)}`,
-  alt: `私人相册照片 ${String(index + 1).padStart(2, '0')}`,
+  src: `/api/photo-archive/${encodeURIComponent(file)}`,
+  alt: photoArchiveAlt[file] ?? `私人相册照片 ${String(index + 1).padStart(2, '0')}`,
   filename: file,
 }));
 
 export const photoArchivePages: PhotoBookPage[] = photoArchivePhotos.map((photo, index) => {
-  const [width, height] = photoArchiveDimensions[photoArchiveFiles[index]];
   return {
     id: `photo-archive-${index + 1}`,
     image: photo.src,
     alt: photo.alt,
     sourceFilename: photo.filename,
-    width,
-    height,
     caption: `PHOTO ARCHIVE · ${String(index + 1).padStart(2, '0')}`,
   };
 });
 
-/** 竖版照片占多数（5/7），书页取 3:4 竖版；横/方图按纸张色 contain 适配。 */
+/** 统一为偏窄的纸张比例，方形照片在纸张色留白中完整呈现。 */
 export const photoArchiveBook: LibraryBook = {
   id: 'photo-archive',
-  title: '私人相册 / PHOTO ARCHIVE',
+  title: 'ONE AND ONE / PHOTO ARCHIVE',
   spineMark: '相册',
   color: '#c8bda8',
   ink: '#315b8f',
-  cover: '/photo-archive/IMG_20250101_000042.jpg',
+  cover: photoArchivePhotos[0].src,
   ratio: 0.75,
   spineHeight: 68,
   pages: photoArchivePages,

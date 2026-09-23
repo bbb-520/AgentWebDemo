@@ -18,7 +18,7 @@ interface Props {
   summarizing?: boolean;
   /** 搜索跳转目标（仅当目标会话为当前激活会话时由 App 传入；nonce 变化即触发重新定位） */
   jump?: { convId: string; seq: number; nonce: number } | null;
-  onSend: (q: string) => void;
+  onSend: (q: string, file?: File) => void;
   onStop: () => void;
   onClear: () => void;
   /** 手动触发会话压缩（POST /api/chat/{sessionId}/summarize） */
@@ -163,11 +163,12 @@ export default function ChatArea({
       <Composer
         value={draft}
         onChange={setDraft}
-        onSend={() => {
+        onSend={(file) => {
           const t = draft.trim();
-          if (!t || busy) return;
+          if ((!t && !file) || busy) return;
           setDraft('');
-          sendText(t);
+          stickRef.current = true;
+          onSend(t || '请根据这张照片进行一次有创意的二次生成。', file);
         }}
         onStop={onStop}
         running={busy}

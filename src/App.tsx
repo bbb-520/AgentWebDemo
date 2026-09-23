@@ -62,11 +62,9 @@ export default function App() {
     setUser(nextUser);
     const status = await getKeyStatus(settings.baseUrl).catch(() => null);
     setKeyStatus(status);
-    if (status?.qwenConfigured && status.tavilyConfigured) {
-      updateSettings({ demoMode: false });
-      setSetupDismissed(true);
-      setLoginGuideOpen(false);
-    }
+    updateSettings({ demoMode: false });
+    setSetupDismissed(true);
+    setLoginGuideOpen(false);
   };
 
   const handleKeysSaved = (status: KeyStatus) => {
@@ -90,12 +88,12 @@ export default function App() {
     }
     getKeyStatus(settings.baseUrl).then((status) => {
       setKeyStatus(status);
-      if (status.qwenConfigured && status.tavilyConfigured && !settings.demoMode) setSetupDismissed(true);
+      if (!settings.demoMode) setSetupDismissed(true);
     }).catch(() => setKeyStatus(null));
   }, [settings.baseUrl, settings.demoMode, user]);
 
-  const onlineReady = Boolean(user && keyStatus?.qwenConfigured && keyStatus?.tavilyConfigured);
-  const runtimeSettings = { ...settings, demoMode: settings.demoMode || !onlineReady };
+  const imageAgentReady = Boolean(user);
+  const runtimeSettings = { ...settings, demoMode: settings.demoMode || !imageAgentReady };
   const enterOfflineChat = () => {
     updateSettings({ demoMode: true });
     setSetupDismissed(true);
@@ -123,7 +121,7 @@ export default function App() {
       {page === 'start' ? (
         <StartPage onStart={() => goto('chat')} onEnterOffline={enterOfflineChat} onOpenAbout={() => goto('about')} />
       ) : page === 'about' ? (
-        <BoboWorld onBack={() => goto('start')} onStart={() => goto('chat')} />
+        <BoboWorld onBack={() => goto('start')} onStart={() => goto('chat')} baseUrl={settings.baseUrl} signedIn={Boolean(user)} />
       ) : page === 'settings' ? (
         <SettingsSheet
           settings={settings}
@@ -193,7 +191,7 @@ export default function App() {
         </div>
       )}
 
-      {page === 'chat' && !settings.demoMode && !authChecking && !setupDismissed && !onlineReady && (
+      {page === 'chat' && !settings.demoMode && !authChecking && !setupDismissed && !imageAgentReady && (
         <SetupGuide
           baseUrl={settings.baseUrl}
           user={user}

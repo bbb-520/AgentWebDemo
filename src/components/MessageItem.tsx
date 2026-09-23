@@ -7,6 +7,7 @@ import { WaitingState } from './Thinking';
 import { EndNote, LiveUsage, ThinkingBlock, ToolCardList } from './LiveBlocks';
 import { SummaryCard } from './SummaryCard';
 import { IconUser } from './icons';
+import { ImageJobCard } from './ImageJobCard';
 
 function StatusBadge({ msg }: { msg: ChatMsg }) {
   if (msg.status === 'stopped')
@@ -77,7 +78,16 @@ export const MessageItem = memo(function MessageItem({ msg }: { msg: ChatMsg }) 
         )}
 
         {isUser ? (
-          <div className="bubble">{msg.content}</div>
+          <>
+            {msg.attachments?.map((attachment) => (
+              <div className="message-attachment" key={attachment.assetId}>
+                <span className="message-attachment-mark">▧</span>
+                <span>{attachment.fileName}</span>
+                <small>{Math.max(1, Math.round(attachment.fileSize / 1024))} KB</small>
+              </div>
+            ))}
+            <div className="bubble">{msg.content}</div>
+          </>
         ) : (
           <div className="bubble-plain">
             {msg.content ? (
@@ -92,6 +102,8 @@ export const MessageItem = memo(function MessageItem({ msg }: { msg: ChatMsg }) 
         )}
 
         {hasError && <div className="msg-error">⚠ {msg.error}</div>}
+
+        {!isUser && msg.imageJobs?.map((job) => <ImageJobCard key={job.jobId} job={job} />)}
 
         {!isUser && (
           <>

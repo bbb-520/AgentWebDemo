@@ -1,25 +1,11 @@
-import memory01 from '../assets/memory-01.jpg';
-import memory02 from '../assets/memory-02.jpg';
-import memory03 from '../assets/memory-03.jpg';
-import memory04 from '../assets/memory-04.jpg';
-import memory05 from '../assets/memory-05.jpg';
-import memory06 from '../assets/memory-06.jpg';
 import boboMark from '../assets/bobo-mark.svg';
 import BoboFlipbook from './BoboFlipbook';
+import { highSchoolPhotos } from './high-school-camera';
 
 interface Props {
   onBack: () => void;
   onStart: () => void;
 }
-
-const memories = [
-  { src: memory01, title: '那天的光', note: '被相机留住的下午', year: '2022 / 01' },
-  { src: memory02, title: '走慢一点', note: '风从窗边经过', year: '2022 / 01' },
-  { src: memory03, title: '还在路上', note: '一些没有目的地的时刻', year: '2022 / 01' },
-  { src: memory04, title: '同一片天空', note: '和朋友分享的安静', year: '2022 / 01' },
-  { src: memory05, title: '不经意', note: '生活没有按下暂停', year: '2022 / 01' },
-  { src: memory06, title: '后来想起', note: '原来那就是青春', year: '2022 / 01' },
-];
 
 export default function AboutBobo({ onBack, onStart }: Props) {
   return (
@@ -47,14 +33,14 @@ export default function AboutBobo({ onBack, onStart }: Props) {
             <p>把照片交给 bobo。它会替你看见重复、留白和情绪，把散落在文件夹里的日子整理成一段可以重新走进去的记忆。</p>
             <div className="about-stats"><span><b>06</b> 个片段</span><span><b>01</b> 个故事</span></div>
           </div>
-          <div className="about-story-image"><img src={memory03} alt="记忆照片" /></div>
+          <div className="about-story-image"><img src={highSchoolPhotos[2].src} alt={highSchoolPhotos[2].alt} /></div>
         </section>
 
         <section className="about-gallery" aria-label="照片记忆">
           <div className="flipbook-intro">
             <p className="about-kicker">BOBO / PHOTO BOOK</p>
             <h2>把相册翻成一段<br /><em>可以回去的时间。</em></h2>
-            <p>点击悬浮书册打开它。书页可以点击、拖动或用方向键翻动。</p>
+            <p>来自“高中相机”的 {highSchoolPhotos.length} 张照片。点击悬浮书册打开它，书页可以点击或用方向键翻动。</p>
           </div>
           <BoboFlipbook />
         </section>
