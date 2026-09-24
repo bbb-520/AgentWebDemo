@@ -59,10 +59,10 @@ export function ImageJobCard({ job, baseUrl, signedIn, onManage }: {
           <img src={imageUrl} alt="图片二次生成结果" loading="lazy" onError={() => void refreshImageUrl()} />
         </a>
         <div className="image-job-actions" aria-label="图片操作">
-          <button type="button" className="image-action-btn" onClick={() => setPublishOpen(true)} disabled={!signedIn || published} title={published ? '已加入 Bobo’s World' : !signedIn ? '登录后可以发布作品' : '上传 Bobo’s World'}>
-            <IconUpload size={17} /><span>{published ? '已上传' : '上传 Bobo’s World'}</span>
+          <button type="button" className="image-action-btn" onClick={() => setPublishOpen(true)} disabled={!signedIn || published} title={published ? '已加入 Bobo’s World' : !signedIn ? '登录后可以发布作品' : '上传 Bobo’s World'} aria-label={published ? '已上传到 Bobo’s World' : '上传到 Bobo’s World'}>
+            <IconUpload size={17} /><span>{published ? '已上传' : '上传到 Bobo’s World'}</span>
           </button>
-          <button type="button" className="image-action-btn" onClick={downloadImage} title="下载到本地">
+          <button type="button" className="image-action-btn" onClick={downloadImage} title="下载到本地" aria-label="下载图片到本地">
             <IconDownload size={17} /><span>下载到本地</span>
           </button>
           {published && <button type="button" className="image-action-btn" onClick={onManage}>管理作品</button>}

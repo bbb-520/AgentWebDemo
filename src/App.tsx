@@ -70,11 +70,11 @@ export default function App() {
   return (
     <>
       {page === 'start' ? (
-        <StartPage onStart={openChat} onOpenLogin={() => setLoginOpen(true)} onOpenAbout={() => goto('about')} onOpenWorld={() => goto('world')} />
+        <StartPage onStart={openChat} onOpenAbout={() => goto('about')} onOpenWorld={() => goto('world')} />
       ) : page === 'about' ? (
         <Suspense fallback={<div className="world-view-loading" aria-hidden="true" />}><AboutBobo onBack={() => goto('start')} onStart={openChat} baseUrl={settings.baseUrl} /></Suspense>
       ) : page === 'world' ? (
-        <Suspense fallback={<div className="world-loading">正在打开 Bobo’s World…</div>}><BoboWorld onBack={() => goto('start')} onStart={openChat} baseUrl={settings.baseUrl} /></Suspense>
+        <Suspense fallback={<div className="world-loading" aria-label="加载中" />}><BoboWorld onBack={() => goto('start')} onStart={openChat} baseUrl={settings.baseUrl} /></Suspense>
       ) : page === 'settings' ? (
         <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => goto('chat')} user={user} onLoggedOut={() => { setUser(null); goto('start'); }} />
       ) : page === 'profile' ? (

@@ -92,6 +92,36 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const activeRunRef = useRef<ActiveRun | null>(null);
   const summarizeRef = useRef(false);
   const imagePollersRef = useRef(new Map<string, number>());
+  /**
+   * Object URLs are intentionally not persisted to localStorage, but they must
+   * survive the attachment replacement that happens after the upload API
+   * returns. Keep them keyed by message id so a late async update cannot turn
+   * an already visible image into a blank placeholder.
+   */
+  const attachmentPreviewRef = useRef(new Map<string, string>());
+
+  const restoreAttachmentPreviews = (items: Conversation[]) =>
+    items.map((conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((message) => {
+        if (!message.attachments?.length) return message;
+        const previewUrl = attachmentPreviewRef.current.get(message.id);
+        if (!previewUrl) return message;
+        const attachments = message.attachments.map((attachment) =>
+          attachment.previewUrl ? attachment : { ...attachment, previewUrl },
+        );
+        return { ...message, attachments };
+      }),
+    }));
+
+  const releaseAttachmentPreviews = (messages: ChatMsg[]) => {
+    messages.forEach((message) => {
+      const previewUrl = attachmentPreviewRef.current.get(message.id);
+      if (!previewUrl) return;
+      URL.revokeObjectURL(previewUrl);
+      attachmentPreviewRef.current.delete(message.id);
+    });
+  };
 
   useEffect(() => {
     listRef.current = conversations;
@@ -115,6 +145,8 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   useEffect(() => () => {
     imagePollersRef.current.forEach((timer) => window.clearInterval(timer));
     imagePollersRef.current.clear();
+    attachmentPreviewRef.current.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
+    attachmentPreviewRef.current.clear();
   }, []);
 
   /* ---------- 会话列表持久化（首帧跳过，后续防抖 260ms） ---------- */
@@ -131,7 +163,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   useEffect(() => {
     const nextScope = accountScope || 'guest';
     if (nextScope === scope) return;
-    const nextConversations = loadConversations(nextScope);
+    const nextConversations = restoreAttachmentPreviews(loadConversations(nextScope));
     setScope(nextScope);
     setConversations(nextConversations);
     setActiveId(null);
@@ -313,6 +345,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
       createdAt: now + 1,
       startedAt: now,
     };
+    if (localPreviewUrl) attachmentPreviewRef.current.set(userMsg.id, localPreviewUrl);
 
     // 注入用户消息 + 空助手消息（同时承担新会话的首次创建）
     setConversations((ls) => {
@@ -359,7 +392,17 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     const patchUser = (attachment: ImageAttachment) =>
       setConversations((ls) => ls.map((c) => c.id !== convId2 ? c : {
         ...c,
-        messages: c.messages.map((m) => m.id === userMsg.id ? { ...m, attachments: [attachment] } : m),
+        messages: c.messages.map((m) => {
+          if (m.id !== userMsg.id) return m;
+          const previewUrl = m.attachments?.[0]?.previewUrl
+            ?? attachment.previewUrl
+            ?? attachmentPreviewRef.current.get(m.id);
+          if (previewUrl) attachmentPreviewRef.current.set(m.id, previewUrl);
+          return {
+            ...m,
+            attachments: [{ ...attachment, ...(previewUrl ? { previewUrl } : {}) }],
+          };
+        }),
       }));
 
     /* --- DATA 增量：缓冲区 + rAF 节流提交 --- */
@@ -634,6 +677,8 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
       notifyRef.current('回答进行中，请先停止再删除', 'err');
       return;
     }
+    const removed = listRef.current.find((conversation) => conversation.id === id);
+    if (removed) releaseAttachmentPreviews(removed.messages);
     setConversations((ls) => ls.filter((c) => c.id !== id));
     if (activeRef.current === id) {
       setActiveId(null);
@@ -644,6 +689,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const clearContext = () => {
     const conv = listRef.current.find((c) => c.id === activeRef.current);
     if (!conv || busyRef.current) return;
+    releaseAttachmentPreviews(conv.messages);
     setConversations((ls) =>
       ls.map((c) => (c.id === conv.id ? { ...c, messages: [], updatedAt: Date.now() } : c)),
     );

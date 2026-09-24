@@ -4,6 +4,7 @@ import Markdown from '../lib/markdown';
 import { AgentOrb } from './Avatar';
 import { IconUser } from './icons';
 import { ImageJobCard } from './ImageJobCard';
+import ThoughtLine from './ThoughtLine.jsx';
 
 export const MessageItem = memo(function MessageItem({ msg, baseUrl, signedIn, onOpenProfile }: {
   msg: ChatMsg;
@@ -17,7 +18,27 @@ export const MessageItem = memo(function MessageItem({ msg, baseUrl, signedIn, o
 
   return (
     <div className={`msg ${isUser ? 'user' : 'assistant'}`} data-seq={msg.seq ?? undefined}>
-      {!isUser ? <div className="avatar"><AgentOrb pulse={isStreaming && !msg.content} /></div> : <div className="avatar av-user"><IconUser size={17} /></div>}
+      {!isUser ? (
+        <div className="assistant-leading">
+          <div className="avatar"><AgentOrb pulse={isStreaming && !msg.content} /></div>
+          <ThoughtLine
+            working={isStreaming}
+            steps={['Reading the question', 'Searching your notes', 'Drafting an answer']}
+            label="Thinking…"
+            doneLabel="Thought for"
+            glyph="sparkle"
+            fontSize={16}
+            breathPeriod={1.6}
+            breathDepth={0.45}
+            settleDuration={350}
+            settleBlur={2}
+            collapsible
+            collapseOnSettle
+            showTimer
+            onSettle={(seconds: number) => console.log(`thought for ${seconds}s`)}
+          />
+        </div>
+      ) : <div className="avatar av-user"><IconUser size={17} /></div>}
       <div className="msg-body">
         {isUser ? (
           <>

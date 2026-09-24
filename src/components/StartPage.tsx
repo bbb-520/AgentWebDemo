@@ -8,7 +8,6 @@ import boboMark from '../assets/bobo-mark.svg';
 
 interface Props {
   onStart: () => void;
-  onOpenLogin: () => void;
   onOpenAbout: () => void;
   onOpenWorld: () => void;
 }
@@ -26,7 +25,7 @@ const SUBTITLES = [
  * 入口页参考 summerWeb-temp：暖色编辑感画布、固定导航、壁纸叠层、
  * 居中 Hero 和轻量的副标题轮播。进入聊天仍使用原有 hash 路由。
  */
-export default function StartPage({ onStart, onOpenLogin, onOpenAbout, onOpenWorld }: Props) {
+export default function StartPage({ onStart, onOpenAbout, onOpenWorld }: Props) {
   const [leaving, setLeaving] = useState(false);
   const [subtitleIndex, setSubtitleIndex] = useState(0);
   const [typedSubtitle, setTypedSubtitle] = useState('');
@@ -97,7 +96,6 @@ export default function StartPage({ onStart, onOpenLogin, onOpenAbout, onOpenWor
           logo={boboMark}
           logoAlt="bobo"
           items={[
-            { label: '登录', href: '#login', onClick: onOpenLogin },
             { label: 'Bobo’s World', href: '#world', onClick: onOpenWorld },
             { label: '关于bbb', href: '#about', onClick: onOpenAbout },
           ]}

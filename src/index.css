@@ -3625,3 +3625,78 @@ h4.md-h {
 }
 
 .image-job-image-unavailable { display: grid; min-height: 190px; place-items: center; color: rgba(240,238,231,.55); background: #202821; font-size: 11px; }
+
+/* Streaming status stays beside the agent avatar and remains readable on both themes. */
+.assistant-leading {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.msg.assistant {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 6px;
+}
+.msg.assistant .assistant-leading { grid-column: 1 / -1; }
+.msg.assistant .msg-body {
+  grid-column: 2;
+  width: 100%;
+  max-width: 100%;
+}
+.assistant-leading .thought-line {
+  min-width: 0;
+  max-width: min(300px, calc(100vw - 106px));
+  margin-top: 4px;
+  color: var(--ink-3);
+}
+.assistant-leading .thought-line button {
+  max-width: 100%;
+}
+
+/* Image actions are core controls, so they are visible without hover and have a clear touch target. */
+.image-job-result-wrap .image-job-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+}
+.image-job-result-wrap .image-job-actions .image-action-btn {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid rgba(35, 48, 39, .2) !important;
+  border-radius: 999px;
+  color: #233027 !important;
+  background: #f0eadf !important;
+  box-shadow: 0 3px 10px rgba(35, 48, 39, .08);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.image-job-result-wrap .image-job-actions .image-action-btn:hover:not(:disabled),
+.image-job-result-wrap .image-job-actions .image-action-btn:focus-visible {
+  border-color: #657b54 !important;
+  background: #e4eddc !important;
+  outline: none;
+}
+.image-job-result-wrap .image-job-actions .image-action-btn:disabled {
+  color: rgba(35, 48, 39, .5) !important;
+  background: #e8e3d9 !important;
+  cursor: not-allowed;
+}
+@media (max-width: 620px) {
+  .assistant-leading .thought-line { max-width: calc(100vw - 92px); }
+  .image-job-result-wrap .image-job-actions .image-action-btn {
+    min-height: 40px;
+    padding-inline: 13px;
+  }
+}
