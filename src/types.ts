@@ -75,6 +75,8 @@ export interface ImageAttachment {
   fileName: string;
   mimeType: string;
   fileSize: number;
+  /** 当前浏览器会话中用于立即展示用户图片的本地对象地址。 */
+  previewUrl?: string;
 }
 
 export interface ImageJobEventData {
@@ -139,7 +141,7 @@ export interface ChatMsg {
   content: string;
   status?: MsgStatus;
   error?: string;
-  /** 思考过程列表（REASONING 1007，每条一行，展示用） */
+  /** 兼容旧历史的思考过程字段；产品界面不会展示。 */
   thinking?: string[];
   /** 工具调用卡片列表（1005/1006/1008 驱动） */
   toolCalls?: ToolCallItem[];
@@ -156,7 +158,7 @@ export interface ChatMsg {
   startedAt?: number;
   /** 助手消息：生成结束（完成/停止/出错）的时间戳 */
   finishedAt?: number;
-  /** 后端 Redis 历史序号（从远端恢复/补拉时透传；用于搜索跳转 data-seq 定位，本地新消息为 undefined） */
+  /** 后端 Redis 历史序号（用于兼容旧历史）。 */
   seq?: number;
   /** 用户上传图片的元数据，不保存二进制或 data URL。 */
   attachments?: ImageAttachment[];
@@ -176,15 +178,14 @@ export interface Conversation {
 export interface Settings {
   /** 后端地址；留空 = 同源（开发时走 Vite 代理 /api，生产时由 Spring Boot 托管静态页） */
   baseUrl: string;
-  /** 演示模式：不请求后端，用本地模拟的完整直播事件展示交互 */
-  demoMode: boolean;
+  theme: 'light' | 'dark';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   // 开发时走 Vite /api 代理，浏览器看到的是同源请求，HttpOnly 登录 Cookie
   // 刷新后可以稳定回传；生产时由 Spring Boot 同源托管静态页。
   baseUrl: '',
-  demoMode: false,
+  theme: 'light',
 };
 
 /* ---------- 后端会话记忆结构化消息（对齐 MessageWithConversation / PageResult） ----------
@@ -220,20 +221,6 @@ export interface RemoteMessage {
   tsEpochMs?: number;
   /** 会话内自增序号（从 1 开始；搜索跳转/结果定位的地基，旧数据缺省为 undefined） */
   seq?: number;
-}
-
-/** 搜索结果（API.md §2.4 SearchHit）：在 RemoteMessage 基础上增加高亮片段 */
-export interface SearchHit extends RemoteMessage {
-  /** 带高亮哨兵（⟦…⟧）的命中片段；未命中关键词时为 null */
-  highlight: string | null;
-}
-
-/** 后端会话摘要（API.md §2.5 ConversationBrief，GET /api/chat/conversations 的元素） */
-export interface ConversationBrief {
-  /** 已剥离 chat- 前缀，可直接用作其它接口的 sessionId 入参 */
-  sessionId: string;
-  /** 内部键 chat-xxx，仅用于展示/排查 */
-  conversationId: string;
 }
 
 /** 通用分页结构（对齐后端 PageResult<T>） */

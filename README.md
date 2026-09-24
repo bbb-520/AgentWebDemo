@@ -21,7 +21,7 @@
 - **真实流事件**：当前后端保证 `SESSION_INFO → DATA × N → STOP`，异常时为 `ERROR → STOP`；工具调用由 Spring AI 内部编排，不对前端直播工具事件。
 - **停止生成**：当前后端没有独立 `/stop` 接口，前端中断浏览器 SSE 流并保留已生成内容。
 - **流空闲超时兜底**：SSE 超过 60s 未收到任何数据自动断连并解锁输入，避免连接挂起时界面永远停在生成中。
-旧版接口恢复代码仍保留为兼容性降级，但当前 UI 不会主动触发这些不存在的端点。
+旧版接口恢复代码已移除，当前 UI 不会主动触发这些不存在的端点。
 
 ## 快速开始
 
@@ -40,7 +40,6 @@ npm run build      # 产物在 dist/
 
 ## 运行模式
 
-- **演示模式（默认兜底）**：本地模拟智能体，不请求后端。会展示 `getWeather → getAttraction → 汇总` 的工具调用步骤与流式打字机效果，内置北京/上海/杭州/成都/广州/深圳/西安/厦门/重庆/三亚等城市示例数据，开箱即用。
 - **直连后端**：对接真实 AgentDemo。工具调用由后端框架自动完成，前端仅展示文本增量；期间以「智能体运行中」状态动画过渡。
 - **本地后端地址固定**：前端始终请求 `http://localhost:18080`，无需配置环境变量或公网地址。
 
@@ -56,8 +55,7 @@ src/
     useSettings.ts      # 运行模式与后端地址（含首启自动识别后端）
     useToasts.ts        # 全局轻提示
   lib/
-    api.ts              # SSE fetch 流解析（含 60s 空闲超时兜底）、stop/history、分页恢复
-    mock.ts             # 演示模式模拟 Agent
+    api.ts              # SSE fetch 流解析（含 60s 空闲超时兜底）、图片与 Bobo World 接口
     markdown.tsx        # 轻量 Markdown 渲染（无第三方依赖）
     remote.ts           # 后端结构化消息 → 前端消息（含摘要卡）的纯映射
     storage.ts          # localStorage 多会话持久化（会话/当前会话/设置）
@@ -65,8 +63,7 @@ src/
   components/
     Sidebar.tsx         # 会话列表（墨色）
     ChatArea.tsx        # 主聊界面
-    MessageItem.tsx     # 消息气泡 + 步骤/状态
-    Thinking.tsx        # 步骤面板 + 思考动画
+    MessageItem.tsx     # 消息气泡 + 状态
     Composer.tsx        # 输入框（Enter 发送/IME 安全）
     SettingsSheet.tsx   # 运行模式与连接设置
     EmptyState.tsx      # 空状态 + 建议卡片

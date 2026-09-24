@@ -7,10 +7,9 @@ interface Props {
   onSend: (file?: File) => void;
   onStop: () => void;
   running: boolean;
-  demoMode: boolean;
 }
 
-export default function Composer({ value, onChange, onSend, onStop, running, demoMode }: Props) {
+export default function Composer({ value, onChange, onSend, onStop, running }: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
@@ -43,8 +42,7 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
 
   const submit = () => {
     if (running) return;
-    const v = value.trim();
-    if (!v && !file) return;
+    if (!file) return;
     onChange('');
     requestAnimationFrame(() => taRef.current && (taRef.current.style.height = 'auto'));
     onSend(file ?? undefined);
@@ -104,15 +102,10 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
         />
         <div className="composer-row">
           <div className="composer-hint">
-            {demoMode ? (
-              <span className="demo-chip">演示模式</span>
-            ) : (
-              <span style={{ color: 'var(--ok)' }}>● 直连后端</span>
-            )}
             <button type="button" className="attach-btn" onClick={() => fileRef.current?.click()} disabled={running}>
               ＋ 图片
             </button>
-            <span>Enter 发送 · Shift+Enter 换行</span>
+            <span>先上传图片 · Enter 发送 · Shift+Enter 换行</span>
           </div>
           {running ? (
             <button className="send-btn stop" onClick={onStop} title="停止生成" aria-label="停止生成">
@@ -122,7 +115,7 @@ export default function Composer({ value, onChange, onSend, onStop, running, dem
             <button
               className="send-btn"
               onClick={submit}
-              disabled={!value.trim() && !file}
+              disabled={!file}
               title="发送"
               aria-label="发送"
             >

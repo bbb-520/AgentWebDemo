@@ -90,3 +90,48 @@
   }
   .generated-archive-card > span { font-size: 8px; }
 }
+
+/* Bobo's World public star map */
+.bobo-map-main { min-height: calc(100vh - 72px); padding: 22px clamp(18px, 5vw, 76px) 76px; }
+.bobo-map-heading { position: relative; top: auto; left: auto; right: auto; z-index: 2; width: fit-content; margin: 4px auto 28px; text-align: center; }
+.bobo-map-heading h1 { font-size: clamp(28px, 4vw, 48px); }
+.bobo-map-heading p { max-width: none; }
+.bobo-star-map { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: clamp(20px, 4vw, 46px); align-items: center; width: min(1120px, 100%); min-height: 330px; margin: 0 auto; padding: 20px 3vw 46px; }
+.bobo-star-dust { position: absolute; inset: 0; pointer-events: none; opacity: .44; background-image: radial-gradient(1px 1px at 12% 22%, #eee8d3 99%, transparent), radial-gradient(1px 1px at 82% 62%, #eee8d3 99%, transparent), radial-gradient(1.5px 1.5px at 56% 15%, #c5b58d 99%, transparent), radial-gradient(1px 1px at 34% 78%, #eee8d3 99%, transparent); background-size: 180px 150px, 240px 190px, 220px 180px, 200px 170px; }
+.bobo-star-card { position: relative; z-index: 1; display: grid; place-items: center; aspect-ratio: .88; min-width: 0; padding: 13px; overflow: visible; border: 1px solid rgba(220,211,183,.26); border-radius: 46% 46% 42% 42%; color: #f0eee7; background: linear-gradient(145deg, rgba(79,91,81,.55), rgba(14,20,17,.88)); box-shadow: 0 10px 38px rgba(0,0,0,.25); cursor: zoom-in; transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease; }
+.bobo-star-card:hover, .bobo-star-card:focus-visible { z-index: 2; border-color: rgba(220,211,183,.76); box-shadow: 0 0 28px rgba(197,181,141,.2), 0 18px 46px rgba(0,0,0,.38); transform: translateY(-5px) scale(1.025); outline: none; }
+.bobo-star-card img { display: block; width: 100%; height: 100%; min-height: 150px; border-radius: inherit; object-fit: cover; filter: saturate(.82); }
+.bobo-star-orbit { position: absolute; inset: -7px; border: 1px solid rgba(197,181,141,.12); border-radius: inherit; pointer-events: none; }
+.bobo-star-card:nth-child(3n + 1) { transform: translateY(10px); }
+.bobo-star-card:nth-child(3n + 2) { transform: translateY(-6px); }
+.bobo-star-card:nth-child(4n) .bobo-star-orbit { transform: rotate(5deg); }
+.bobo-star-index { position: absolute; right: 3px; bottom: -14px; color: rgba(240,238,231,.53); font: 9px/1 var(--mono, monospace); letter-spacing: .12em; }
+.bobo-image-unavailable { display: grid; width: 100%; height: 100%; min-height: 150px; place-items: center; border-radius: inherit; color: rgba(240,238,231,.58); background: repeating-linear-gradient(135deg, rgba(255,255,255,.035) 0 8px, transparent 8px 16px); font-size: 11px; }
+.bobo-world-state { display: grid; justify-items: center; align-content: center; min-height: 42vh; padding: 24px; color: rgba(240,238,231,.74); text-align: center; }
+.bobo-world-state strong { color: #f0eee7; font: 400 clamp(25px, 4vw, 42px)/1.1 Georgia, serif; letter-spacing: -.04em; }
+.bobo-world-state p { max-width: 430px; margin: 12px 0 18px; color: rgba(240,238,231,.5); font-size: 12px; line-height: 1.75; }
+.bobo-world-state button, .bobo-world-more button { padding: 10px 16px; border: 1px solid rgba(197,181,141,.42); border-radius: 99px; color: #f0eee7; background: rgba(197,181,141,.1); cursor: pointer; font: inherit; font-size: 11px; }
+.bobo-world-more { display: flex; justify-content: center; padding: 2px 0 24px; }
+.bobo-world-more button:disabled { opacity: .56; cursor: wait; }
+.bobo-world-modal { position: fixed; z-index: 1100; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(5,9,7,.82); backdrop-filter: blur(12px); animation: bobo-modal-in .24s ease both; }
+.bobo-world-viewer { position: relative; display: grid; justify-items: center; gap: 16px; width: min(100%, 900px); max-height: calc(100dvh - 44px); padding: 22px 22px 16px; overflow: auto; border: 1px solid rgba(220,211,183,.24); border-radius: 17px; background: rgba(18,24,20,.96); box-shadow: 0 24px 90px rgba(0,0,0,.48); }
+.bobo-world-viewer > img { display: block; max-width: 100%; max-height: calc(100dvh - 150px); object-fit: contain; border-radius: 8px; }
+.bobo-world-close { position: sticky; top: 0; z-index: 2; justify-self: end; width: 34px; height: 34px; margin-bottom: -46px; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; color: #fff; background: rgba(8,12,10,.72); cursor: pointer; font-size: 24px; line-height: 1; }
+.bobo-world-caption { max-width: 680px; color: rgba(240,238,231,.82); font: 15px/1.75 Georgia, serif; text-align: center; opacity: 0; transform: translateY(8px); transition: opacity .4s ease, transform .4s ease; overflow-wrap: anywhere; white-space: pre-wrap; }
+.bobo-world-caption.is-visible { opacity: 1; transform: translateY(0); }
+.bobo-world-caption strong { color: #c5b58d; font-weight: 500; }
+.bobo-viewer-date { color: rgba(240,238,231,.37); font: 9px/1 var(--mono, monospace); letter-spacing: .08em; }
+.bobo-viewer-unavailable { display: grid; min-height: 35vh; place-items: center; color: rgba(240,238,231,.58); }
+@keyframes bobo-caption-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes bobo-modal-in { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 620px) {
+  .bobo-map-main { padding: 15px 15px calc(72px + env(safe-area-inset-bottom)); }
+  .bobo-map-heading { margin: 8px auto 18px; }
+  .bobo-star-map { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; min-height: 300px; padding: 8px 1px 20px; }
+  .bobo-star-card { padding: 8px; aspect-ratio: .86; }
+  .bobo-world-viewer { padding: 15px 12px 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bobo-star-card, .bobo-world-modal, .bobo-world-caption { transition: none; animation: none; }
+  .bobo-world-caption { opacity: 1; transform: none; }
+}

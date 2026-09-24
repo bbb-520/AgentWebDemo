@@ -1,12 +1,10 @@
 import {
   type ChatEvent,
-  type ConversationBrief,
   type ImageAttachment,
   type ImageJobRef,
   type RemoteMessage,
   type RemotePage,
   type Role,
-  type SearchHit,
   type SummarizeResult,
 } from '../types';
 
@@ -17,7 +15,6 @@ export function apiUrl(path: string, baseUrl: string): string {
   const b = baseUrl.trim().replace(/\/+$/, '');
   return b ? `${b}${path}` : path;
 }
-
 export type StreamResult = { kind: 'done' | 'error' | 'timeout'; message?: string };
 
 export interface StreamChatOptions {
@@ -33,7 +30,6 @@ export interface StreamChatOptions {
    */
   idleTimeoutMs?: number;
 }
-
 /** 后端历史条目的前缀约定（API.md §3.4）：半角冒号 + 空格 */
 const USER_PREFIX = '我: ';
 const ASSISTANT_PREFIX = '助手: ';
@@ -169,7 +165,6 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
     if (signal) signal.removeEventListener('abort', onOuterAbort);
   }
 }
-
 export interface UploadPolicyResponse {
   assetId: string;
   objectKey: string;
@@ -241,7 +236,6 @@ export async function fetchImageJob(jobId: string, baseUrl: string, signal?: Abo
     return null;
   }
 }
-
 export async function fetchConversationImageJobs(conversationId: string, baseUrl: string): Promise<ImageJobView[]> {
   try {
     const response = await fetch(apiUrl(`/api/image-jobs?conversationId=${encodeURIComponent(conversationId)}`, baseUrl), {
@@ -266,6 +260,102 @@ export async function fetchImageArchive(baseUrl: string, limit = 24): Promise<Im
   } catch {
     return [];
   }
+}
+
+export class BoboApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'BoboApiError';
+  }
+}
+
+export interface BoboWorldItem {
+  itemId: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  hasCaption: boolean;
+  caption: string | null;
+  senderName: string | null;
+  anonymous: boolean;
+  createdAt: string;
+}
+
+export interface BoboMineItem {
+  itemId: string;
+  status: 'ACTIVE' | 'HIDDEN' | 'DELETED';
+  visibility: 'PUBLIC' | 'PRIVATE';
+  caption: string | null;
+  prompt?: string | null;
+  anonymous: boolean;
+  version: number;
+  imageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoboWorldPage { items: BoboWorldItem[]; nextCursor: string | null; }
+export interface BoboMinePage { items: BoboMineItem[]; nextCursor: string | null; publicCount: number; }
+export interface BoboPublishRequest { jobId: string; caption?: string | null; anonymous?: boolean; }
+export interface BoboPublishResult {
+  itemId: string;
+  status: string;
+  caption: string | null;
+  anonymous: boolean;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  version: number;
+  imageUrl: string | null;
+  createdAt: string;
+}
+
+async function boboRequest<T>(path: string, baseUrl: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(apiUrl(path, baseUrl), {
+    ...init,
+    credentials: 'include',
+    headers: { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(init.headers ?? {}) },
+  });
+  if (!response.ok) {
+    const raw = await response.text().catch(() => '');
+    let message = raw;
+    try {
+      const body = JSON.parse(raw) as { message?: unknown; detail?: unknown; error?: unknown };
+      if (typeof body.message === 'string') message = body.message;
+      else if (typeof body.detail === 'string') message = body.detail;
+      else if (typeof body.error === 'string') message = body.error;
+    } catch { /* Keep the plain response text when it is not JSON. */ }
+    throw new BoboApiError(message || `请求失败（HTTP ${response.status}）`, response.status);
+  }
+  if (response.status === 204) return undefined as T;
+  return await response.json() as T;
+}
+
+function boboPagePath(path: string, limit: number, cursor?: string | null) {
+  const query = new URLSearchParams({ limit: String(Math.max(1, Math.min(48, Math.trunc(limit)))) });
+  if (cursor) query.set('cursor', cursor);
+  return `${path}?${query.toString()}`;
+}
+
+export function fetchBoboWorld(baseUrl: string, limit = 24, cursor?: string | null, signal?: AbortSignal): Promise<BoboWorldPage> {
+  return boboRequest(boboPagePath('/api/bobo/world', limit, cursor), baseUrl, { signal });
+}
+
+export function fetchMyBoboItems(baseUrl: string, limit = 24, cursor?: string | null, signal?: AbortSignal): Promise<BoboMinePage> {
+  return boboRequest(boboPagePath('/api/bobo/items/mine', limit, cursor), baseUrl, { signal });
+}
+
+export function publishBoboItem(baseUrl: string, request: BoboPublishRequest): Promise<BoboPublishResult> {
+  return boboRequest('/api/bobo/items', baseUrl, { method: 'POST', body: JSON.stringify(request) });
+}
+
+export function patchBoboItem(baseUrl: string, itemId: string, patch: {
+  caption: string; anonymous: boolean; visibility: 'PUBLIC' | 'PRIVATE'; version: number;
+}): Promise<BoboMineItem> {
+  return boboRequest(`/api/bobo/items/${encodeURIComponent(itemId)}`, baseUrl, {
+    method: 'PATCH', body: JSON.stringify(patch),
+  });
+}
+
+export function deleteBoboItem(baseUrl: string, itemId: string): Promise<void> {
+  return boboRequest(`/api/bobo/items/${encodeURIComponent(itemId)}`, baseUrl, { method: 'DELETE' });
 }
 
 /**
@@ -422,82 +512,3 @@ export async function requestSummarize(
   }
 }
 
-/* =====================================================================
- * 会话记忆检索（API.md §4.9 / §4.10，契约已定稿；后端实现前接口 404）
- * 按 A8 约定：后端未实现/不可达时静默降级（返回 null / 空数组），UI 不弹错。
- * ===================================================================== */
-
-/** GET /api/chat/search 的查询参数（API.md §4.9，全部可选） */
-export interface SearchMessagesParams {
-  /** 全文关键词（作用于 content TEXT 字段）；省略/空串 = 不做全文过滤 */
-  q?: string;
-  /** 原始 sessionId（本地会话 id）；省略 = 跨会话全局搜索 */
-  sessionId?: string;
-  /** USER / ASSISTANT / SYSTEM / TOOL，精确匹配；省略 = 不限 */
-  messageType?: string;
-  /** 起始时间（epoch 毫秒，闭区间） */
-  from?: number;
-  /** 结束时间（epoch 毫秒，闭区间） */
-  to?: number;
-  /** 1-based */
-  page?: number;
-  /** 每页条数 */
-  size?: number;
-}
-
-/**
- * 全文/条件检索：GET /api/chat/search
- * 响应为 PageResult<SearchHit>，按 seq 倒序（最新优先）。
- * 网络失败 / HTTP 非 2xx（含后端未实现 404）→ 返回 null，由 UI 静默降级为空态。
- */
-export async function searchMessages(
-  params: SearchMessagesParams,
-  baseUrl: string,
-): Promise<RemotePage<SearchHit> | null> {
-  try {
-    const qs = new URLSearchParams();
-    if (typeof params.q === 'string' && params.q.trim()) qs.set('q', params.q.trim());
-    if (typeof params.sessionId === 'string' && params.sessionId.trim())
-      qs.set('sessionId', params.sessionId.trim());
-    if (typeof params.messageType === 'string' && params.messageType)
-      qs.set('messageType', params.messageType);
-    if (typeof params.from === 'number' && Number.isFinite(params.from))
-      qs.set('from', String(Math.trunc(params.from)));
-    if (typeof params.to === 'number' && Number.isFinite(params.to))
-      qs.set('to', String(Math.trunc(params.to)));
-    const page = Math.max(1, (params.page ?? 1) | 0);
-    const size = Math.max(1, Math.min(200, (params.size ?? 20) | 0));
-    qs.set('page', String(page));
-    qs.set('size', String(size));
-
-    const res = await fetch(apiUrl(`/api/chat/search?${qs.toString()}`, baseUrl), {
-      credentials: 'include',
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as RemotePage<SearchHit>;
-    return json && Array.isArray(json.records) ? json : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 拉取后端会话列表：GET /api/chat/conversations
- * 返回元素 sessionId 已剥离 chat- 前缀，可直接作为搜索/恢复的入参。
- * 网络失败 / 接口未实现（404）→ 返回空数组，UI 降级为仅展示本地会话。
- */
-export async function fetchRemoteConversations(baseUrl: string): Promise<ConversationBrief[]> {
-  try {
-    const res = await fetch(apiUrl('/api/chat/conversations', baseUrl), {
-      credentials: 'include',
-    });
-    if (!res.ok) return [];
-    const json = (await res.json()) as { total?: number; conversations?: ConversationBrief[] };
-    const list = Array.isArray(json?.conversations) ? json.conversations : [];
-    return list.filter(
-      (c) => c && typeof c.sessionId === 'string' && c.sessionId,
-    ) as ConversationBrief[];
-  } catch {
-    return [];
-  }
-}

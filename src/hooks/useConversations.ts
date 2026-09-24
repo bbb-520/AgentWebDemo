@@ -18,7 +18,6 @@ import type {
 import { EVENT } from '../types';
 import {
   fetchRemoteHistory,
-  fetchSessionMessagesPage,
   parseHistoryLine,
   requestSummarize,
   restoreSessionMessages,
@@ -27,8 +26,7 @@ import {
   fetchImageJob,
   uploadImageAsset,
 } from '../lib/api';
-import { runMockAgent } from '../lib/mock';
-import { mergeRemoteMsgs, remoteToChatMsgs } from '../lib/remote';
+import { remoteToChatMsgs } from '../lib/remote';
 import {
   deriveTitle,
   loadActiveSessionId,
@@ -83,9 +81,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const [summarizing, setSummarizing] = useState(false);
   /** 强制重跑「空会话自动恢复」的令牌（重复点选同一会话时也能重试） */
   const [hydrateTick, setHydrateTick] = useState(0);
-  /** 搜索跳转定位目标：ChatArea 渲染完成后滚到 data-seq 并闪烁（API.md §7.2 F6/A6） */
-  const [jumpTarget, setJumpTarget] = useState<{ convId: string; seq: number; nonce: number } | null>(null);
-  const jumpNonceRef = useRef(0);
 
   // 最新值镜像：供异步闭包 / mount 期 effect 读取，避免 stale closure
   const listRef = useRef(conversations);
@@ -147,87 +142,15 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     }
   }, [accountScope, scope]);
 
-  /** 切换当前会话并记住（seed 预览会话不记，避免无 hash 场景误恢复演示数据） */
+  /** 切换当前会话并记住。 */
   const applyActive = (id: string) => {
     setActiveId(id);
-    if (!id.startsWith('seed')) saveActiveSessionId(id, scope);
+    saveActiveSessionId(id, scope);
   };
-
-  /* ---------- 启动：预览种子（#seed-demo）优先于自动恢复 ---------- */
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!window.location.hash.includes('seed-demo')) return;
-    const now = Date.now();
-    const seededId = 'seed-demo';
-    const conv: Conversation = {
-      id: seededId,
-      title: '北京天气·直播演示',
-      createdAt: now,
-      updatedAt: now,
-      messages: [
-        {
-          id: 'seed-sum',
-          role: 'system',
-          content:
-            '用户先咨询北京当日的实时天气并计划出行；助手调用天气与景点两个工具，给出晴朗、18~29°C、西北风 3 级的实况，并结合晴天筛选出故宫博物院、八达岭长城、颐和园三个推荐景点，最后补充了昼夜温差大、早晚加衣的出行建议。',
-          status: 'done',
-          summaryMeta: {
-            summarizedCount: 6,
-            rangeStart: new Date(now - 4 * 3600_000).toISOString(),
-            rangeEnd: new Date(now - 900_000).toISOString(),
-          },
-          createdAt: now - 600_000,
-        },
-        {
-          id: 'seed-user',
-          role: 'user',
-          content: '北京今天天气怎么样？适合去哪玩？',
-          createdAt: now,
-        },
-        {
-          id: 'seed-asst',
-          role: 'assistant',
-          status: 'done',
-          createdAt: now + 1,
-          startedAt: now,
-          finishedAt: now + 5200,
-          conversationId: 'chat-seed-demo',
-          thinking: [
-            '需要先获取 北京 的实时天气数据。',
-            '当前 北京 天气为「晴」，据此筛选适合的景点。',
-          ],
-          toolCalls: [
-            {
-              localId: 'tc-w',
-              toolName: 'getWeather',
-              argumentsRaw: '{"city":"北京"}',
-              status: 'ok',
-              result:
-                '北京今日晴，气温 18 ~ 29°C（当前约 26°C），湿度 41%，西北风 3 级。秋高气爽，昼夜温差较大，早晚记得加一件薄外套。',
-            },
-            {
-              localId: 'tc-a',
-              toolName: 'getAttraction',
-              argumentsRaw: '{"city":"北京","weather":"晴"}',
-              status: 'ok',
-              result:
-                '已从 4 个候选中按天气筛出 3 个：故宫博物院、八达岭长城、颐和园。',
-            },
-          ],
-          usage: { promptTokens: 142, completionTokens: 268, totalTokens: 410, durationMs: 5200 },
-          content:
-            '为你查到 **北京** 的实时天气（模拟数据）：\n\n> ☀️ 北京今日晴，气温 18 ~ 29°C（当前约 26°C），湿度 41%，西北风 3 级。秋高气爽，昼夜温差较大，早晚记得加一件薄外套。\n\n结合 北京 当前天气，推荐这几个地方：\n\n1. **故宫博物院** — 历史底蕴深厚，秋日红墙金瓦光影极佳（适合晴☀️）\n2. **八达岭长城** — 能见度高，登高望远视野开阔（适合晴☀️）\n3. **颐和园** — 昆明湖畔微风不燥，适合散步与游船（适合晴或多云⛅）\n\n— —\n\n💡 小贴士：秋高气爽，昼夜温差较大，早晚记得加一件薄外套。 建议把需要户外观光的安排在上午，中午炎热时段安排室内或用餐。',
-        },
-      ],
-    };
-    setConversations((ls) => (ls.some((c) => c.id === seededId) ? ls : [conv, ...ls]));
-    setActiveId(seededId);
-  }, []);
 
   /* ---------- 启动：自动恢复上次会话（FR-1.3 / agent.currentSessionId） ---------- */
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (window.location.hash.includes('seed-demo')) return;
     const last = loadActiveSessionId(scope);
     if (!last || last.startsWith('seed')) return;
     if (!listRef.current.some((c) => c.id === last)) return;
@@ -241,7 +164,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
    * 以 activeId / hydrateTick 为触发，重复点选同一空会话也能重试。
    * ===================================================================== */
   useEffect(() => {
-    if (!activeId || settingsRef.current.demoMode) return;
+    if (!activeId) return;
     const conv = listRef.current.find((c) => c.id === activeId);
     if (!conv) return;
     if (conv.messages.length === 0) void hydrateConv(activeId);
@@ -257,7 +180,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const hydrateConv = async (convId: string) => {
     const conv = listRef.current.find((c) => c.id === convId);
     if (!conv || conv.messages.length > 0) return;
-    if (settingsRef.current.demoMode) return;
 
     const baseUrl = settingsRef.current.baseUrl;
     const now = Date.now();
@@ -336,7 +258,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   };
 
   const hydrateImageJobs = async (convId: string) => {
-    if (settingsRef.current.demoMode) return;
     const jobs = await fetchConversationImageJobs(convId, settingsRef.current.baseUrl);
     if (!jobs.length) return;
     setConversations((ls) => ls.map((c) => {
@@ -363,10 +284,10 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     if (assistantId) jobs.filter((job) => job.status === 'QUEUED' || job.status === 'PROCESSING').forEach((job) => watchImageJob(convId, assistantId, job.jobId));
   };
 
-  /* ---------- 发送（含 SSE/Mock 统一状态机） ---------- */
+  /* ---------- 发送（SSE 状态机） ---------- */
   const send = (raw: string, file?: File) => {
     const text = raw.trim();
-    if (!text || busyRef.current) return;
+    if ((!text && !file) || busyRef.current) return;
 
     let convId = activeRef.current ?? '';
     const exists = listRef.current.some((c) => c.id === convId);
@@ -376,12 +297,13 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     }
 
     const now = Date.now();
+    const localPreviewUrl = file ? URL.createObjectURL(file) : undefined;
     const userMsg: ChatMsg = {
       id: uid(),
       role: 'user',
       content: text,
       createdAt: now,
-      attachments: file ? [{ assetId: 'pending', fileName: file.name, mimeType: file.type, fileSize: file.size }] : undefined,
+      attachments: file ? [{ assetId: 'pending', fileName: file.name, mimeType: file.type, fileSize: file.size, previewUrl: localPreviewUrl }] : undefined,
     };
     const asstMsg: ChatMsg = {
       id: uid(),
@@ -397,7 +319,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
       const has = ls.some((c) => c.id === convId);
       const conv: Conversation = {
         id: convId,
-        title: deriveTitle(text),
+        title: deriveTitle(text || '图片创作'),
         messages: [userMsg, asstMsg],
         createdAt: now,
         updatedAt: now,
@@ -407,7 +329,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
             c.id === convId
               ? {
                   ...c,
-                  title: c.title === '新对话' ? deriveTitle(text) : c.title,
+                  title: c.title === '新对话' ? deriveTitle(text || '图片创作') : c.title,
                   messages: [...c.messages, userMsg, asstMsg],
                   updatedAt: now,
                 }
@@ -418,7 +340,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
 
     const convId2 = convId;
     const asstId = asstMsg.id;
-    const wasDemo = settingsRef.current.demoMode;
     const controller = new AbortController();
 
     let settled = false;
@@ -469,9 +390,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     };
 
     /* --- 直播字段写入 --- */
-    const addThinking = (line: string) =>
-      patchAsst((m) => ({ ...m, thinking: [...(m.thinking ?? []), line] }));
-
     const addToolStarted = (d: ToolCallStartedData) =>
       patchAsst((m) => ({
         ...m,
@@ -565,35 +483,25 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
 
     /**
      * 停止本次生成（文档 §7.3）：
-     * - 演示模式：直接本地 abort；
-     * - 真实模式：当前后端只提供 POST /api/chat，没有独立的 /stop 端点，
-     *   因此直接中断浏览器流；后端会按连接异常保存已生成的部分消息。
+     * 直接中断浏览器流；后端会按连接异常保存已生成的部分消息。
      */
     const requestStop = () => {
       if (settled || stopRequested) return;
       stopRequested = true;
-      if (wasDemo) {
-        controller.abort();
-        finish('stopped', { endReason: 'stopped_by_user' });
-        return;
-      }
       controller.abort();
     };
 
     activeRunRef.current = { convId: convId2, msgId: asstId, requestStop };
     setBusy({ convId: convId2, msgId: asstId });
 
-    /** 全量事件分派：演示模式与真实后端共用同一套状态逻辑 */
+    /** 后端事件分派。思考过程和工具事件只用于兼容旧协议，不渲染到界面。 */
     const onLiveEvent = (e: ChatEvent) => {
       switch (e.eventType) {
         case EVENT.DATA:
           if (typeof e.eventData === 'string' && e.eventData) pushText(e.eventData);
           break;
         case EVENT.REASONING: {
-          if (typeof e.eventData === 'string') {
-            const line = e.eventData.trim();
-            if (line) addThinking(line);
-          }
+          // 思考过程只兼容旧协议，产品界面不保存也不展示。
           break;
         }
         case EVENT.TOOL_CALL_STARTED: {
@@ -649,22 +557,11 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     };
 
     const run = (async () => {
-      if (wasDemo) {
-        const res = await runMockAgent(convId2, text, controller.signal, { onEvent: onLiveEvent });
-        if (!settled) {
-          finish(res.kind === 'aborted' ? 'stopped' : 'done', {
-            endReason: res.kind === 'aborted' ? 'stopped_by_user' : 'stop',
-          });
-        }
-        return;
-      }
-
       let uploadedAttachment: ImageAttachment | undefined;
       if (file) {
-        addThinking('正在把照片安全上传到 OSS…');
         try {
           uploadedAttachment = await uploadImageAsset(file, settingsRef.current.baseUrl, controller.signal);
-          patchUser(uploadedAttachment);
+          patchUser({ ...uploadedAttachment, previewUrl: localPreviewUrl });
         } catch (error) {
           const message = error instanceof Error ? error.message : '照片上传失败';
           finish('error', { error: message, endReason: 'error' });
@@ -757,11 +654,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const summarizeActive = async () => {
     const conv = listRef.current.find((c) => c.id === activeRef.current);
     if (!conv || conv.messages.length === 0 || busyRef.current || summarizeRef.current) return;
-    if (settingsRef.current.demoMode) {
-      notifyRef.current('演示模式没有后端记忆可压缩，请先切到直连后端', 'err');
-      return;
-    }
-
     summarizeRef.current = true;
     setSummarizing(true);
     try {
@@ -808,92 +700,11 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     }
   };
 
-  /* ---------- 搜索跳转（API.md §7.2 F6 / 验收 A6-A7） ---------- */
-
-  /** 触发一次定位：ChatArea 渲染到 data-seq 节点后滚动 + 闪烁（nonce 保证重复跳同一 seq 也生效） */
-  const fireJump = (convId: string, seq: number) => {
-    jumpNonceRef.current += 1;
-    setJumpTarget({ convId, seq, nonce: jumpNonceRef.current });
-  };
-
-  /**
-   * 从搜索结果跳到指定会话的某条历史消息：
-   * 1) 目标会话不在本地列表（后端独有，如 chat-default）→ 自动建一个本地会话壳；
-   * 2) 切到该会话；本地窗口已含该 seq → 直接定位；
-   * 3) 否则按 seq 计算所在页补拉（fetchSessionMessagesPage）并入列表，toast「已加载所在片段」。
-   * 接口不可用（后端未实现 / 未启动，验收 A8）→ 静默提示，不崩。
-   */
-  const jumpToSeq = async (sessionId: string, seq: number) => {
-    const convId = sessionId.trim();
-    const s = Math.trunc(seq);
-    const validSeq = Number.isFinite(s) && s >= 1 ? s : 0; // 旧数据可能无 seq：0 = 无法精确定位
-    if (!convId) return;
-    if (busyRef.current?.convId === convId) {
-      notifyRef.current('该会话正在生成回答，请先停止再跳转', 'err');
-      return;
-    }
-
-    // ① 自动建会话壳（后端独有会话首次点击时本地化）
-    if (!listRef.current.some((c) => c.id === convId)) {
-      const now = Date.now();
-      setConversations((ls) =>
-        ls.some((c) => c.id === convId)
-          ? ls
-          : [{ id: convId, title: '新对话', messages: [], createdAt: now, updatedAt: now }, ...ls],
-      );
-    }
-    applyActive(convId);
-    if (!validSeq) return; // 无 seq：仅切到会话，空壳由自动恢复（hydrate）拉最近历史
-
-    // ② 等一帧让 React 落库，读取最新本地消息列表
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    const conv = listRef.current.find((c) => c.id === convId);
-    if (!conv) return; // 防御：理论上不存在
-
-    // ③ 本地窗口已含目标条 → 直接定位
-    if (conv.messages.some((m) => m.seq === validSeq)) {
-      fireJump(convId, validSeq);
-      return;
-    }
-    if (settingsRef.current.demoMode) {
-      notifyRef.current('演示模式没有后端历史可跳转，请先切到直连后端', 'err');
-      return;
-    }
-
-    // ④ 目标在当前窗口之外（超长会话只恢复了最近片段）→ 补拉所在页
-    const page = Math.ceil(validSeq / 100); // 补拉页 size 固定 100（与恢复策略一致）
-    const pg = await fetchSessionMessagesPage(convId, page, 100, settingsRef.current.baseUrl);
-    if (!pg || !Array.isArray(pg.records) || pg.records.length === 0) {
-      notifyRef.current('目标会话历史不可用（后端未启动或尚未实现分页/搜索接口）', 'err');
-      return;
-    }
-    const built = remoteToChatMsgs(pg.records);
-    if (!built || built.msgs.length === 0) {
-      notifyRef.current('目标片段无可用内容', 'err');
-      return;
-    }
-    const hadLocal = conv.messages.length > 0;
-    setConversations((ls) =>
-      ls.map((c) =>
-        c.id !== convId
-          ? c
-          : { ...c, messages: mergeRemoteMsgs(c.messages, built.msgs), updatedAt: Date.now() },
-      ),
-    );
-    notifyRef.current(
-      hadLocal
-        ? '目标消息在窗口外，已补拉所在片段并并入当前列表'
-        : '已加载目标消息所在片段',
-    );
-    fireJump(convId, validSeq);
-  };
-
   return {
     conversations,
     activeId,
     busy,
     summarizing,
-    jumpTarget,
     send,
     stop,
     select,
@@ -901,6 +712,5 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     removeConversation,
     clearContext,
     summarizeActive,
-    jumpToSeq,
   };
 }

@@ -2,7 +2,7 @@ import type { Conversation, Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 
 const CONV_KEY = 'travel-agent.conversations.v1';
-const SETTINGS_KEY = 'travel-agent.settings.v1';
+const SETTINGS_KEY = 'bobo.settings.v2';
 /** 最近选中的会话 id（刷新后自动恢复，对应 FRONTEND_REQUIREMENTS.md §1.3 的 agent.currentSessionId） */
 const ACTIVE_SESSION_KEY = 'travel-agent.activeSessionId.v1';
 
@@ -38,6 +38,7 @@ export function saveConversations(list: Conversation[], scope = 'guest'): void {
       ...conversation,
       messages: conversation.messages.map((message) => ({
         ...message,
+        attachments: message.attachments?.map(({ previewUrl: _previewUrl, ...attachment }) => attachment),
         imageJobs: message.imageJobs?.map(({ imageUrl: _imageUrl, ...job }) => job),
       })),
     }));
@@ -71,9 +72,9 @@ export function loadSettings(): Settings {
     if (!raw) return { ...DEFAULT_SETTINGS };
     const s = JSON.parse(raw) as Partial<Settings>;
     return {
-      // 清理旧版本可能保存的公网地址，始终使用本地后端。
+      // 后端地址仍保持同源默认值；应用已移除演示模式和连接模式切换。
       baseUrl: DEFAULT_SETTINGS.baseUrl,
-      demoMode: typeof s.demoMode === 'boolean' ? s.demoMode : DEFAULT_SETTINGS.demoMode,
+      theme: s.theme === 'dark' ? 'dark' : DEFAULT_SETTINGS.theme,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

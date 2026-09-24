@@ -61,6 +61,22 @@ export const IconClose = (p: P) => (
   </svg>
 );
 
+export const IconUpload = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 16V4" />
+    <path d="m7 9 5-5 5 5" />
+    <path d="M5 20h14" />
+  </svg>
+);
+
+export const IconDownload = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 4v12" />
+    <path d="m7 11 5 5 5-5" />
+    <path d="M5 20h14" />
+  </svg>
+);
+
 export const IconUser = (p: P) => (
   <svg {...base(p)}>
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />

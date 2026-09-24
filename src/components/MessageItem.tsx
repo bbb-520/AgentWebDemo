@@ -1,114 +1,39 @@
 import { memo } from 'react';
 import type { ChatMsg } from '../types';
 import Markdown from '../lib/markdown';
-import { fmtClock } from '../lib/format';
 import { AgentOrb } from './Avatar';
-import { WaitingState } from './Thinking';
-import { EndNote, LiveUsage, ThinkingBlock, ToolCardList } from './LiveBlocks';
-import { SummaryCard } from './SummaryCard';
 import { IconUser } from './icons';
 import { ImageJobCard } from './ImageJobCard';
 
-function StatusBadge({ msg }: { msg: ChatMsg }) {
-  if (msg.status === 'stopped')
-    return (
-      <span className="stat stopped">
-        <i className="dot" /> 已停止
-      </span>
-    );
-  if (msg.status === 'error')
-    return (
-      <span className="stat error">
-        <i className="dot" /> 出错
-      </span>
-    );
-  if (msg.status === 'done')
-    return (
-      <span className="stat done">
-        <i className="dot" /> 完成
-      </span>
-    );
-  if (msg.status === 'streaming' && msg.content === '')
-    return (
-      <span className="stat streaming">
-        <i className="dot" /> 运行中
-      </span>
-    );
-  return null;
-}
-
-export const MessageItem = memo(function MessageItem({ msg }: { msg: ChatMsg }) {
-  // 会话历史摘要卡：独立于 user/assistant 气泡的居中展示（role='system'）
-  if (msg.role === 'system') {
-    return <SummaryCard msg={msg} />;
-  }
-
+export const MessageItem = memo(function MessageItem({ msg, baseUrl, signedIn, onOpenProfile }: {
+  msg: ChatMsg;
+  baseUrl: string;
+  signedIn: boolean;
+  onOpenProfile: () => void;
+}) {
+  if (msg.role === 'system') return null;
   const isUser = msg.role === 'user';
   const isStreaming = msg.status === 'streaming';
-  const hasLive = (msg.thinking?.length ?? 0) > 0 || (msg.toolCalls?.length ?? 0) > 0;
-  const isSeedPreview = msg.id.startsWith('seed'); // 演示/截图场景：保持完整展开
-  const hasError = !!msg.error && msg.status === 'error';
 
   return (
     <div className={`msg ${isUser ? 'user' : 'assistant'}`} data-seq={msg.seq ?? undefined}>
-      {!isUser && (
-        <div className="avatar">
-          <AgentOrb pulse={isStreaming && msg.content === ''} />
-        </div>
-      )}
-
-      {isUser && (
-        <div className="avatar av-user">
-          <IconUser size={17} />
-        </div>
-      )}
-
+      {!isUser ? <div className="avatar"><AgentOrb pulse={isStreaming && !msg.content} /></div> : <div className="avatar av-user"><IconUser size={17} /></div>}
       <div className="msg-body">
-        <div className="msg-meta">
-          {!isUser && <span style={{ fontWeight: 650, color: 'var(--ink-2)' }}>bobo</span>}
-          <span>{fmtClock(msg.createdAt)}</span>
-          <StatusBadge msg={msg} />
-        </div>
-
-        {!isUser && hasLive && (
-          <div className="live-stack">
-            <ThinkingBlock lines={msg.thinking ?? []} streaming={isStreaming} keepOpen={isSeedPreview} />
-            <ToolCardList calls={msg.toolCalls ?? []} />
-          </div>
-        )}
-
         {isUser ? (
           <>
             {msg.attachments?.map((attachment) => (
-              <div className="message-attachment" key={attachment.assetId}>
-                <span className="message-attachment-mark">▧</span>
+              <div className="user-image-message" key={attachment.assetId}>
+                {attachment.previewUrl ? <img src={attachment.previewUrl} alt="用户发送的图片" /> : <div className="user-image-placeholder">图片已上传</div>}
                 <span>{attachment.fileName}</span>
-                <small>{Math.max(1, Math.round(attachment.fileSize / 1024))} KB</small>
               </div>
             ))}
-            <div className="bubble">{msg.content}</div>
+            {msg.content && <div className="bubble">{msg.content}</div>}
           </>
         ) : (
-          <div className="bubble-plain">
-            {msg.content ? (
-              <Markdown content={msg.content} />
-            ) : isStreaming ? (
-              !hasLive && <WaitingState />
-            ) : (
-              <span style={{ color: 'var(--ink-3)', fontSize: 13.5 }}>（本轮无文本输出）</span>
-            )}
-            {isStreaming && msg.content && <span className="caret" />}
-          </div>
-        )}
-
-        {hasError && <div className="msg-error">⚠ {msg.error}</div>}
-
-        {!isUser && msg.imageJobs?.map((job) => <ImageJobCard key={job.jobId} job={job} />)}
-
-        {!isUser && (
           <>
-            <EndNote msg={msg} />
-            <LiveUsage msg={msg} />
+            {msg.content && <div className="bubble-plain"><Markdown content={msg.content} />{isStreaming && <span className="caret" />}</div>}
+            {msg.error && <div className="msg-error">⚠ {msg.error}</div>}
+            {msg.imageJobs?.map((job) => <ImageJobCard key={job.jobId} job={job} baseUrl={baseUrl} signedIn={signedIn} onManage={onOpenProfile} />)}
           </>
         )}
       </div>

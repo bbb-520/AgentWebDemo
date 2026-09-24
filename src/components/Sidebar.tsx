@@ -11,8 +11,6 @@ interface Props {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
-  /** 打开会话记忆搜索面板（API.md §7.2 F5；演示模式无 Redis，入口隐藏） */
-  onOpenSearch?: () => void;
   onOpenSettings: () => void;
   onWidthChange?: (width: number) => void;
   /** 回到开始页（Landing） */
@@ -29,7 +27,6 @@ export default function Sidebar({
   onSelect,
   onNew,
   onDelete,
-  onOpenSearch,
   onOpenSettings,
   onWidthChange,
   onGoHome,
@@ -77,8 +74,6 @@ export default function Sidebar({
         <IconPlus size={16} />
         新建对话
       </button>
-
-      {/* 当前后端契约只提供流式对话；搜索记忆入口暂不展示，避免引导到旧接口。 */}
 
       {sorted.length > 0 && <div className="sb-list-label">最近会话</div>}
       <div className="sb-list dark-scroll">

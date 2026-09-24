@@ -8,8 +8,9 @@ import boboMark from '../assets/bobo-mark.svg';
 
 interface Props {
   onStart: () => void;
-  onEnterOffline: () => void;
+  onOpenLogin: () => void;
   onOpenAbout: () => void;
+  onOpenWorld: () => void;
 }
 
 const SUBTITLES = [
@@ -25,7 +26,7 @@ const SUBTITLES = [
  * 入口页参考 summerWeb-temp：暖色编辑感画布、固定导航、壁纸叠层、
  * 居中 Hero 和轻量的副标题轮播。进入聊天仍使用原有 hash 路由。
  */
-export default function StartPage({ onStart, onEnterOffline, onOpenAbout }: Props) {
+export default function StartPage({ onStart, onOpenLogin, onOpenAbout, onOpenWorld }: Props) {
   const [leaving, setLeaving] = useState(false);
   const [subtitleIndex, setSubtitleIndex] = useState(0);
   const [typedSubtitle, setTypedSubtitle] = useState('');
@@ -36,12 +37,6 @@ export default function StartPage({ onStart, onEnterOffline, onOpenAbout }: Prop
     if (leaving) return;
     setLeaving(true);
     timer.current = window.setTimeout(onStart, 420);
-  };
-
-  const goOffline = () => {
-    if (leaving) return;
-    setLeaving(true);
-    timer.current = window.setTimeout(onEnterOffline, 420);
   };
 
   useEffect(
@@ -102,8 +97,8 @@ export default function StartPage({ onStart, onEnterOffline, onOpenAbout }: Prop
           logo={boboMark}
           logoAlt="bobo"
           items={[
-            { label: '首页', href: '#home', onClick: () => undefined },
-            { label: '能力', href: '#capabilities', onClick: () => undefined },
+            { label: '登录', href: '#login', onClick: onOpenLogin },
+            { label: 'Bobo’s World', href: '#world', onClick: onOpenWorld },
             { label: '关于bbb', href: '#about', onClick: onOpenAbout },
           ]}
           activeHref="#home"
@@ -133,7 +128,7 @@ export default function StartPage({ onStart, onEnterOffline, onOpenAbout }: Prop
             radius={174}
             falloff={1.25}
             wall="bounce"
-            onCatch={goOffline}
+            onCatch={go}
           />
         </div>
         <div className="start-enter-hint">

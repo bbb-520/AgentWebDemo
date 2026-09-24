@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMsg } from '../types';
-import { SUGGESTIONS } from '../types';
 import { MessageItem } from './MessageItem';
 import EmptyState from './EmptyState';
 import Composer from './Composer';
@@ -13,11 +12,10 @@ interface Props {
   title: string;
   messages: ChatMsg[];
   busy: boolean;
-  demoMode: boolean;
+  baseUrl: string;
+  signedIn: boolean;
   /** 是否正在请求后端压缩本会话（按钮转圈禁用） */
   summarizing?: boolean;
-  /** 搜索跳转目标（仅当目标会话为当前激活会话时由 App 传入；nonce 变化即触发重新定位） */
-  jump?: { convId: string; seq: number; nonce: number } | null;
   onSend: (q: string, file?: File) => void;
   onStop: () => void;
   onClear: () => void;
@@ -29,16 +27,15 @@ interface Props {
   onOpenProfile: () => void;
   user: AuthUser | null;
   onToggleNav: () => void;
-  onSwitchToLive: () => void;
 }
 
 export default function ChatArea({
   title,
   messages,
   busy,
-  demoMode,
+  baseUrl,
+  signedIn,
   summarizing = false,
-  jump = null,
   onSend,
   onStop,
   onClear,
@@ -49,7 +46,6 @@ export default function ChatArea({
   onOpenProfile,
   user,
   onToggleNav,
-  onSwitchToLive,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -71,24 +67,9 @@ export default function ChatArea({
     }
   }, [messages, busy]);
 
-  // 搜索跳转：渲染完成后定位到 data-seq 节点并短暂高亮闪烁（API.md §7.2 F6/A6）
-  // 依赖 jump 引用（nonce 变化）与消息条数（补拉落地后的首次渲染）——streaming 改内容不触发
-  useEffect(() => {
-    if (!jump) return;
-    const root = scrollRef.current;
-    if (!root) return;
-    const el = root.querySelector<HTMLElement>(`[data-seq="${jump.seq}"]`);
-    if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el.classList.add('seq-flash');
-    const t = window.setTimeout(() => el.classList.remove('seq-flash'), 2000);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jump, messages.length]);
-
   const sendText = (q: string) => {
+    setDraft(q);
     stickRef.current = true;
-    onSend(q);
   };
 
   return (
@@ -133,32 +114,10 @@ export default function ChatArea({
           {isEmpty ? (
             <EmptyState onAsk={sendText} />
           ) : (
-            messages.map((m) => <MessageItem key={m.id} msg={m} />)
+            messages.map((m) => <MessageItem key={m.id} msg={m} baseUrl={baseUrl} signedIn={signedIn} onOpenProfile={onOpenProfile} />)
           )}
         </div>
       </div>
-
-      {!isEmpty && !busy && (
-        <div className="quick-row" style={{ paddingBottom: 2 }}>
-          {SUGGESTIONS.slice(0, 3).map((s) => (
-            <button key={s.title} className="quick-chip" onClick={() => sendText(s.ask)}>
-              {s.icon} {s.ask.length > 16 ? s.ask.slice(0, 15) + '…' : s.ask}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {demoMode && !busy && (
-        <div className="demo-banner" role="status">
-          <span className="demo-banner-ic">⚠</span>
-          <span className="demo-banner-text">
-            当前为 <b>本地演示</b>，回答来自模拟数据，<b>不会请求 Java 后端</b>。
-          </span>
-          <button className="demo-banner-btn" onClick={onSwitchToLive}>
-            切到真实后端 →
-          </button>
-        </div>
-      )}
 
       <Composer
         value={draft}
@@ -172,7 +131,6 @@ export default function ChatArea({
         }}
         onStop={onStop}
         running={busy}
-        demoMode={demoMode}
       />
     </section>
   );
