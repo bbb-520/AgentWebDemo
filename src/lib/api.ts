@@ -2,10 +2,6 @@ import {
   type ChatEvent,
   type ImageAttachment,
   type ImageJobRef,
-  type RemoteMessage,
-  type RemotePage,
-  type Role,
-  type SummarizeResult,
 } from '../types';
 
 /**
@@ -26,36 +22,24 @@ export interface StreamChatOptions {
   onEvent: (e: ChatEvent) => void;
   /**
    * 流空闲超时（单位 ms，默认 60000）：超过该时长未收到任何新数据视为连接挂起，
-   * 自动中断并返回 {kind:'timeout'}，避免 UI 永远停在「生成中」（文档 §8.7 兜底建议）。
+   * 自动中断并返回 {kind:'timeout'}，避免 UI 永远停在「生成中」。
    */
   idleTimeoutMs?: number;
 }
-/** 后端历史条目的前缀约定（API.md §3.4）：半角冒号 + 空格 */
-const USER_PREFIX = '我: ';
-const ASSISTANT_PREFIX = '助手: ';
-
-/** 把后端历史字符串解析为角色 + 内容；无法识别的行返回 null */
-export function parseHistoryLine(line: string): { role: Role; content: string } | null {
-  if (line.startsWith(USER_PREFIX)) return { role: 'user', content: line.slice(USER_PREFIX.length) };
-  if (line.startsWith(ASSISTANT_PREFIX))
-    return { role: 'assistant', content: line.slice(ASSISTANT_PREFIX.length) };
-  return null;
-}
-
 /**
  * 调用后端 SSE(POST /api/chat, text/event-stream)。
  * 使用 fetch + ReadableStream 逐行解析 `data: {...}`（兼容 \n 与 \r\n），
  * 每次收到一个事件都会回调 onEvent；以 1002(STOP)/1004(ERROR) 收尾。
  * 网络/HTTP 层面的失败以 {kind:'error'} 返回，不会抛异常。
  *
- * 解析健壮性（FRONTEND_SSE_LIVE_REQUIREMENTS.md FR-2）：
+ * 解析健壮性：
  * - 半行 JSON 跨 chunk → 按行缓冲后再解析；
  * - 多个 data: 挤在同一 chunk → 逐行循环处理；
  * - 空行 / 注释行(以 ':' 开头) / 其他字段行 → 跳过；
  * - 末尾无换行的残留 → 流关闭后补处理；
- * - 单帧 JSON 解析失败 → console.warn 跳过该帧，绝不中断整条流（FR-18）。
+ * - 单帧 JSON 解析失败 → console.warn 跳过该帧，绝不中断整条流。
  *
- * 注意（API.md §4）：流式接口的业务错误几乎都是 HTTP 200 + 1004 事件，
+ * 注意：流式接口的业务错误通常通过 1004 事件返回，
  * 成败以「是否收到 1002 / 1004」为准，不能只看 HTTP 状态码。
  */
 export async function streamChat(opts: StreamChatOptions): Promise<StreamResult> {
@@ -67,7 +51,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
     else signal.addEventListener('abort', onOuterAbort, { once: true });
   }
 
-  /* --- 空闲超时兜底：每次收到新数据重置计时，超时则本地中断（§8.7） --- */
+  /* --- 空闲超时兜底：每次收到新数据重置计时，超时则本地中断 --- */
   const idleMs = Math.max(3000, opts.idleTimeoutMs ?? 60000);
   let idleHit = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -96,7 +80,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<StreamResult>
     try {
       onEvent(JSON.parse(payload) as ChatEvent);
     } catch (err) {
-      // FR-18：单帧解析失败只告警并跳过，不影响后续事件
+      // 单帧解析失败只告警并跳过，不影响后续事件
       console.warn('[SSE] 忽略无法解析的事件帧：', payload, err);
     }
   };
@@ -249,19 +233,6 @@ export async function fetchConversationImageJobs(conversationId: string, baseUrl
   }
 }
 
-export async function fetchImageArchive(baseUrl: string, limit = 24): Promise<ImageJobView[]> {
-  try {
-    const response = await fetch(apiUrl(`/api/image-jobs/archive?limit=${Math.max(1, Math.min(50, limit))}`, baseUrl), {
-      credentials: 'include',
-    });
-    if (!response.ok) return [];
-    const value = await response.json();
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
-
 export class BoboApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -357,158 +328,3 @@ export function patchBoboItem(baseUrl: string, itemId: string, patch: {
 export function deleteBoboItem(baseUrl: string, itemId: string): Promise<void> {
   return boboRequest(`/api/bobo/items/${encodeURIComponent(itemId)}`, baseUrl, { method: 'DELETE' });
 }
-
-/**
- * 停止后端生成：POST /api/chat/stop?sessionId=xxx
- * 返回请求是否成功送达（后端幂等：会话不在生成中同样返回 stopped:true）。
- * 按 API.md §3.3：调用后应等 1002 自然收尾，不要立刻本地 abort；
- * 仅在本函数返回 false（后端不可达）时由上层本地 abort 兜底。
- */
-export async function stopGeneration(sessionId: string, baseUrl: string): Promise<boolean> {
-  try {
-    const res = await fetch(apiUrl(`/api/chat/stop?sessionId=${encodeURIComponent(sessionId)}`, baseUrl), {
-      method: 'POST',
-      credentials: 'include',
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** 清空后端记忆：DELETE /api/chat/history?sessionId=xxx */
-export async function clearRemoteHistory(sessionId: string, baseUrl: string): Promise<void> {
-  try {
-    await fetch(apiUrl(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, baseUrl), {
-      method: 'DELETE',
-      credentials: 'include',
-    });
-  } catch {
-    /* 后端未启动时静默失败 */
-  }
-}
-
-/** 拉取后端会话历史（每条形如 "我: ..." / "助手: ..."），失败返回空数组 */
-export async function fetchRemoteHistory(sessionId: string, baseUrl: string): Promise<string[]> {
-  try {
-    const res = await fetch(apiUrl(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, baseUrl), {
-      credentials: 'include',
-    });
-    if (!res.ok) return [];
-    const json = (await res.json()) as { history?: string[] };
-    return json.history ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * 探测后端是否可达（设置页“检测连通性”/首启自动识别用）。
- *
- * 不能复用 {@link fetchRemoteHistory}：它在内部把网络错误吞掉并返回空数组，
- * 会让“后端未启动”被误判成“连接成功（历史为空）”。本函数做真实的
- * GET /api/chat/history 请求，并对超时做兜底，用返回结构区分三种情况：
- * ok=true（HTTP 2xx）、ok=false+status（后端在但报错）、ok=false+status=0（不可达）。
- */
-/* =====================================================================
- * 会话记忆二级存储接口（2026-09-07 后端新增，Redis 长期历史）
- * 契约见 FRONTEND_REQUIREMENTS.md §4.5 / §4.8 / §4.7
- * ===================================================================== */
-
-/**
- * 分页查询会话历史：GET /api/chat/{sessionId}/messages?page=&size=
- *
- * 页码从 1 开始，size 默认 20；按时间升序。后端对 page<1 / size<1 有兜底。
- * {@link restoreSessionMessages} 基于本函数做「恢复会话」的分页循环。
- */
-export async function fetchSessionMessagesPage(
-  sessionId: string,
-  page: number,
-  size: number,
-  baseUrl: string,
-): Promise<RemotePage<RemoteMessage> | null> {
-  try {
-    const qs = `?page=${Math.max(1, page | 0)}&size=${Math.max(1, size | 0)}`;
-    const res = await fetch(
-      apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/messages${qs}`, baseUrl),
-      { credentials: 'include' },
-    );
-    if (!res.ok) return null;
-    const json = (await res.json()) as RemotePage<RemoteMessage>;
-    return json && Array.isArray(json.records) ? json : null;
-  } catch {
-    return null;
-  }
-}
-
-export interface RestoreOptions {
-  /** 每页条数（默认 100，上限 200） */
-  pageSize?: number;
-  /**
-   * 恢复上限（默认 100，文档 §7.4）。会话不超过上限时逐页取满；
-   * 超过上限时只保留「时间上最近的一个连续窗口」（仍升序），保证能接着最新对话继续聊，
-   * 避免把整个超长会话渲染出来。
-   */
-  maxRecords?: number;
-}
-
-/**
- * 按文档 §4.5（⭐恢复会话用）用分页接口循环恢复历史，替代一次性 /messages/all：
- * 先取第 1 页拿到 total，再从计算出的起始页逐页取到最后一页。
- *
- * 任一页请求失败 / 后端为旧版本（404 / 结构不符）返回 null，
- * 由调用方降级为旧文本接口 GET /history。
- */
-export async function restoreSessionMessages(
-  sessionId: string,
-  baseUrl: string,
-  options: RestoreOptions = {},
-): Promise<RemoteMessage[] | null> {
-  const size = Math.min(200, Math.max(1, (options.pageSize ?? 100) | 0));
-  const cap = Math.max(1, (options.maxRecords ?? 100) | 0);
-
-  const first = await fetchSessionMessagesPage(sessionId, 1, size, baseUrl);
-  if (!first || !Array.isArray(first.records)) return null;
-
-  // 超长会话：计算能覆盖「最近 cap 条」的起始页（分页粒度可能带来少量冗余，末尾统一裁剪）
-  let fromPage = 1;
-  if (first.total > cap) {
-    const firstSeq = first.total - cap + 1; // 想保留的首条序号（从 1 起）
-    fromPage = Math.max(1, Math.ceil(firstSeq / size));
-  }
-
-  const records: RemoteMessage[] = first.records;
-  for (let p = fromPage; p <= first.totalPages; p++) {
-    if (p === 1) continue;
-    const pg = await fetchSessionMessagesPage(sessionId, p, size, baseUrl);
-    if (!pg) return null;
-    records.push(...pg.records);
-  }
-
-  if (records.length > cap) return records.slice(records.length - cap);
-  return records;
-}
-
-/**
- * 手动触发会话压缩：POST /api/chat/{sessionId}/summarize
- *
- * 后端 LLM 对「保留最近 keep-recent 条」以外的旧历史生成 ≤max-length 字摘要，
- * 并双写 Redis 与内存窗口（幂等：消息太少或上次摘要后新积累不足返回 summarized=false）。
- * 返回 null 表示请求失败（后端不可达 / 非 200）。
- */
-export async function requestSummarize(
-  sessionId: string,
-  baseUrl: string,
-): Promise<SummarizeResult | null> {
-  try {
-    const res = await fetch(
-      apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/summarize`, baseUrl),
-      { method: 'POST', credentials: 'include' },
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as SummarizeResult;
-  } catch {
-    return null;
-  }
-}
-

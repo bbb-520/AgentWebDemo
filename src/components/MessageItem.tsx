@@ -12,12 +12,11 @@ export const MessageItem = memo(function MessageItem({ msg, baseUrl, signedIn, o
   signedIn: boolean;
   onOpenProfile: () => void;
 }) {
-  if (msg.role === 'system') return null;
   const isUser = msg.role === 'user';
   const isStreaming = msg.status === 'streaming';
 
   return (
-    <div className={`msg ${isUser ? 'user' : 'assistant'}`} data-seq={msg.seq ?? undefined}>
+    <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
       {!isUser ? (
         <div className="assistant-leading">
           <div className="avatar"><AgentOrb pulse={isStreaming && !msg.content} /></div>

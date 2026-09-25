@@ -99,11 +99,9 @@ export default function App() {
             busy={chat.busy !== null}
             baseUrl={settings.baseUrl}
             signedIn={Boolean(user)}
-            summarizing={chat.summarizing}
             onSend={chat.send}
             onStop={chat.stop}
             onClear={chat.clearContext}
-            onSummarize={chat.summarizeActive}
             onOpenSettings={() => goto('settings')}
             onOpenLogin={() => setLoginOpen(true)}
             onGoHome={() => goto('start')}

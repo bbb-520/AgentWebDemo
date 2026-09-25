@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from '../types';
 
 const CONV_KEY = 'travel-agent.conversations.v1';
 const SETTINGS_KEY = 'bobo.settings.v2';
-/** 最近选中的会话 id（刷新后自动恢复，对应 FRONTEND_REQUIREMENTS.md §1.3 的 agent.currentSessionId） */
+/** 最近选中的会话 id，刷新后自动恢复。 */
 const ACTIVE_SESSION_KEY = 'travel-agent.activeSessionId.v1';
 
 function scopedKey(key: string, scope = 'guest'): string {

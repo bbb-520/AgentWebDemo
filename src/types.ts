@@ -1,4 +1,4 @@
-/** 与后端 ChatEventTypeEnum 对齐的事件类型（FRONTEND_SSE_LIVE_REQUIREMENTS.md §3） */
+/** 与后端 ChatEventTypeEnum 对齐的事件类型。 */
 export const EVENT = {
   /** 数据事件：eventData 为最终回答文本增量 */
   DATA: 1001,
@@ -16,7 +16,7 @@ export const EVENT = {
   REASONING: 1007,
   /** 工具调用失败：eventData 为 ToolCallFailedData，失败后流仍会继续 */
   TOOL_CALL_FAILED: 1008,
-  /** Token 用量与耗时：eventData 为 UsageData，位于 STOP 之前 */
+  /** Token 用量与耗时事件，当前界面忽略。 */
   USAGE: 1009,
   /** 会话元信息：eventData 为 SessionInfoData，流内第一条事件 */
   SESSION_INFO: 1010,
@@ -30,7 +30,7 @@ export interface ChatEvent {
   eventData: unknown;
 }
 
-/* ---------- 各事件 eventData 的类型（文档 §4 / §9 字段约束） ---------- */
+/* ---------- 各事件 eventData 的类型 ---------- */
 
 /** 1005 TOOL_CALL_STARTED */
 export interface ToolCallStartedData {
@@ -52,14 +52,6 @@ export interface ToolCallResultData {
 export interface ToolCallFailedData {
   toolName: string;
   error: string;
-}
-
-/** 1009 USAGE */
-export interface UsageData {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  durationMs: number;
 }
 
 /** 1010 SESSION_INFO */
@@ -98,19 +90,9 @@ export interface ImageJobRef {
   error?: string | null;
 }
 
-export type Role = 'user' | 'assistant' | 'system';
+export type Role = 'user' | 'assistant';
 
 export type MsgStatus = 'streaming' | 'done' | 'stopped' | 'error';
-
-/** 会话历史摘要卡片的元信息（对齐后端摘要消息 metadata，见 FRONTEND-REQUIREMENTS-会话记忆优化.md §4） */
-export interface SummaryMeta {
-  /** 该摘要覆盖的原始消息条数 */
-  summarizedCount?: number;
-  /** 覆盖时间范围起点（ISO-8601 UTC） */
-  rangeStart?: string;
-  /** 覆盖时间范围终点（ISO-8601 UTC） */
-  rangeEnd?: string;
-}
 
 /** 一轮结束原因：stop=正常 / error=错误 / stopped_by_user=用户中断 / aborted=连接异常 */
 export type EndReason = 'stop' | 'error' | 'stopped_by_user' | 'aborted';
@@ -118,7 +100,7 @@ export type EndReason = 'stop' | 'error' | 'stopped_by_user' | 'aborted';
 /** 工具调用卡片的本地状态 */
 export type ToolStatus = 'running' | 'ok' | 'failed' | 'stopped';
 
-/** 助手消息内一张「工具调用」卡片（文档 §6.2 toolCalls[]） */
+/** 助手消息内一张「工具调用」卡片。 */
 export interface ToolCallItem {
   /** 前端本地唯一 ID（用于 React key） */
   localId: string;
@@ -141,25 +123,17 @@ export interface ChatMsg {
   content: string;
   status?: MsgStatus;
   error?: string;
-  /** 兼容旧历史的思考过程字段；产品界面不会展示。 */
-  thinking?: string[];
   /** 工具调用卡片列表（1005/1006/1008 驱动） */
   toolCalls?: ToolCallItem[];
-  /** Token 用量（1009，可选；缺失时 UI 隐藏） */
-  usage?: UsageData | null;
   /** 后端会话键（1010 SESSION_INFO 提供） */
   conversationId?: string;
-  /** 本轮结束原因（收尾语义，文档 §6.2 endReason） */
+  /** 本轮结束原因。 */
   endReason?: EndReason;
-  /** 摘要卡专属：role='system' 时携带压缩摘要的覆盖范围信息（恢复自后端 metadata） */
-  summaryMeta?: SummaryMeta | null;
   createdAt: number;
   /** 助手消息：开始生成的时间戳 */
   startedAt?: number;
   /** 助手消息：生成结束（完成/停止/出错）的时间戳 */
   finishedAt?: number;
-  /** 后端 Redis 历史序号（用于兼容旧历史）。 */
-  seq?: number;
   /** 用户上传图片的元数据，不保存二进制或 data URL。 */
   attachments?: ImageAttachment[];
   /** 后台图片任务，仅保存任务 ID 和状态。 */
@@ -176,69 +150,17 @@ export interface Conversation {
 }
 
 export interface Settings {
-  /** 后端地址；留空 = 同源（开发时走 Vite 代理 /api，生产时由 Spring Boot 托管静态页） */
+  /** 后端地址；留空 = 同源（开发时走 Vite 代理 /api，生产时由 Nginx 代理 /api）。 */
   baseUrl: string;
   theme: 'light' | 'dark';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   // 开发时走 Vite /api 代理，浏览器看到的是同源请求，HttpOnly 登录 Cookie
-  // 刷新后可以稳定回传；生产时由 Spring Boot 同源托管静态页。
+  // 刷新后可以稳定回传；生产时由 Nginx 提供静态页并代理 /api。
   baseUrl: '',
   theme: 'light',
 };
-
-/* ---------- 后端会话记忆结构化消息（对齐 MessageWithConversation / PageResult） ----------
- * 对应接口：
- *   GET  /api/chat/{sessionId}/messages          分页查询（Redis，恢复历史用）
- *   GET  /api/chat/{sessionId}/messages/all      全量消息（Redis，含摘要）
- *   POST /api/chat/{sessionId}/summarize         手动触发压缩
- */
-
-/** 后端消息类型（MessageWithConversation 的字符串 messageType） */
-export type RemoteMsgType = 'USER' | 'ASSISTANT' | 'SYSTEM' | 'TOOL';
-
-/** 摘要消息 metadata 键（后端常量） */
-export const REMOTE_META = {
-  SUMMARY: 'summary',
-  SUMMARIZED_COUNT: 'summarizedCount',
-  RANGE_START: 'rangeStart',
-  RANGE_END: 'rangeEnd',
-} as const;
-
-/** 一条后端会话消息（分页 records / messages/all 的数组元素，结构一致） */
-export interface RemoteMessage {
-  /** 内部会话键，形如 chat-xxx */
-  conversationId: string;
-  messageType: RemoteMsgType;
-  /** 消息文本；摘要消息为 SystemMessage 原文（带「以下是此前对话的摘要：」前缀） */
-  content: string;
-  /** 普通消息为 null；摘要消息带 summary 标记与覆盖范围 */
-  metadata: { [k: string]: unknown } | null;
-  /** 消息时间戳（ISO-8601 UTC） */
-  timestamp: string;
-  /** epoch 毫秒副本（NUMERIC 索引字段；后端 Redis 8 结构已带，旧数据缺省为 undefined） */
-  tsEpochMs?: number;
-  /** 会话内自增序号（从 1 开始；搜索跳转/结果定位的地基，旧数据缺省为 undefined） */
-  seq?: number;
-}
-
-/** 通用分页结构（对齐后端 PageResult<T>） */
-export interface RemotePage<T> {
-  records: T[];
-  total: number;
-  page: number;
-  size: number;
-  totalPages: number;
-}
-
-/** POST /summarize 的响应体 */
-export interface SummarizeResult {
-  summarized: boolean;
-  sessionId: string;
-  /** summarized=true 时为摘要文本；false 时为空串 */
-  summary: string;
-}
 
 export const SUGGESTIONS: { icon: string; title: string; desc: string; ask: string }[] = [
   {

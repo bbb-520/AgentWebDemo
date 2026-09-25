@@ -13,20 +13,14 @@ import type {
   ToolCallItem,
   ToolCallResultData,
   ToolCallStartedData,
-  UsageData,
 } from '../types';
 import { EVENT } from '../types';
 import {
-  fetchRemoteHistory,
-  parseHistoryLine,
-  requestSummarize,
-  restoreSessionMessages,
   streamChat,
   fetchConversationImageJobs,
   fetchImageJob,
   uploadImageAsset,
 } from '../lib/api';
-import { remoteToChatMsgs } from '../lib/remote';
 import {
   deriveTitle,
   loadActiveSessionId,
@@ -49,7 +43,7 @@ interface ActiveRun {
   requestStop: () => void;
 }
 
-/** DATA 增量用 rAF 节流提交，避免逐条高频 setState（文档 FR-7） */
+/** DATA 增量用 rAF 节流提交，避免逐条高频 setState。 */
 const RAF =
   typeof requestAnimationFrame !== 'undefined'
     ? requestAnimationFrame
@@ -68,9 +62,9 @@ interface UseConversationsOptions {
 
 /**
  * 会话状态中枢：会话列表（localStorage 持久化）、当前选中会话、单在途请求 busy 标记，
- * 以及全部会话动作（发送/停止/选择恢复/新建/删除/清空/总结）。
+ * 以及全部会话动作（发送/停止/选择/新建/删除/清空）。
  *
- * 核心不变量（FRONTEND_REQUIREMENTS.md §1）：一个会话 = 一个 sessionId（uuid），
+ * 核心不变量：一个会话 = 一个 sessionId（uuid），
  * 只在「新建对话」时更换，刷新后自动恢复上次会话，同一时刻只允许一个在途请求。
  */
 export function useConversations({ settings, accountScope = 'guest', notify, openSettings }: UseConversationsOptions) {
@@ -78,9 +72,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations(accountScope || 'guest'));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyInfo | null>(null);
-  const [summarizing, setSummarizing] = useState(false);
-  /** 强制重跑「空会话自动恢复」的令牌（重复点选同一会话时也能重试） */
-  const [hydrateTick, setHydrateTick] = useState(0);
 
   // 最新值镜像：供异步闭包 / mount 期 effect 读取，避免 stale closure
   const listRef = useRef(conversations);
@@ -90,7 +81,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   const notifyRef = useRef(notify);
   const openSettingsRef = useRef(openSettings);
   const activeRunRef = useRef<ActiveRun | null>(null);
-  const summarizeRef = useRef(false);
   const imagePollersRef = useRef(new Map<string, number>());
   /**
    * Object URLs are intentionally not persisted to localStorage, but they must
@@ -170,7 +160,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     const last = loadActiveSessionId(nextScope);
     if (last && nextConversations.some((c) => c.id === last)) {
       setActiveId(last);
-      setHydrateTick((t) => t + 1);
     }
   }, [accountScope, scope]);
 
@@ -180,86 +169,22 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     saveActiveSessionId(id, scope);
   };
 
-  /* ---------- 启动：自动恢复上次会话（FR-1.3 / agent.currentSessionId） ---------- */
+  /* ---------- 启动：自动恢复上次会话 ---------- */
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const last = loadActiveSessionId(scope);
     if (!last || last.startsWith('seed')) return;
     if (!listRef.current.some((c) => c.id === last)) return;
     applyActive(last);
-    setHydrateTick((t) => t + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope]);
 
-  /* =====================================================================
-   * 空会话恢复：选中（或自动恢复）一个「本地无消息」的会话时，从后端拉历史。
-   * 以 activeId / hydrateTick 为触发，重复点选同一空会话也能重试。
-   * ===================================================================== */
+  /* 图片任务状态从后端刷新，会话消息由 localStorage 持久化。 */
   useEffect(() => {
     if (!activeId) return;
-    const conv = listRef.current.find((c) => c.id === activeId);
-    if (!conv) return;
-    if (conv.messages.length === 0) void hydrateConv(activeId);
     void hydrateImageJobs(activeId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, hydrateTick]);
-
-  /**
-   * 恢复某会话历史：
-   * 1) 优先结构化分页恢复（文档 §4.5，Redis）：USER/ASSISTANT + 最新摘要卡；
-   * 2) 后端为旧版本（分页接口不可用/返回空）时回退文本 /history（内存窗口）。
-   */
-  const hydrateConv = async (convId: string) => {
-    const conv = listRef.current.find((c) => c.id === convId);
-    if (!conv || conv.messages.length > 0) return;
-
-    const baseUrl = settingsRef.current.baseUrl;
-    const now = Date.now();
-
-    // 1) 结构化恢复：分页接口 → user/assistant + 摘要卡
-    const records = await restoreSessionMessages(convId, baseUrl);
-    const built = records ? remoteToChatMsgs(records) : null;
-    if (built && built.msgs.length > 0) {
-      // 更新器内再校验一次，避免与进行中的发送/清空竞争
-      setConversations((ls) =>
-        ls.map((c) =>
-          c.id !== convId || c.messages.length > 0
-            ? c
-            : { ...c, messages: built.msgs, updatedAt: now },
-        ),
-      );
-      notifyRef.current(
-        `已从后端恢复 ${built.chatCount} 条历史消息${
-          built.hasSummary ? '（含会话历史摘要）' : ''
-        }`,
-      );
-      return;
-    }
-
-    // 2) 兜底：旧后端文本 /history（返回「我: / 助手:」行）
-    const rows = await fetchRemoteHistory(convId, baseUrl);
-    const msgs: ChatMsg[] = [];
-    rows.forEach((line, i) => {
-      const parsed = parseHistoryLine(line);
-      if (parsed && parsed.content) {
-        msgs.push({
-          id: uid(),
-          role: parsed.role,
-          content: parsed.content,
-          status: 'done',
-          createdAt: now + i,
-        });
-      }
-    });
-    if (!msgs.length) return;
-
-    setConversations((ls) =>
-      ls.map((c) =>
-        c.id !== convId || c.messages.length > 0 ? c : { ...c, messages: msgs, updatedAt: now },
-      ),
-    );
-    notifyRef.current(`已从后端恢复 ${msgs.length} 条历史消息`);
-  };
+  }, [activeId]);
 
   const patchJob = (convId: string, msgId: string, job: ImageJobRef) => {
     setConversations((ls) => ls.map((c) => c.id !== convId ? c : {
@@ -480,8 +405,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
         (t) => ({ ...t, status: 'failed' as const, error: d.error }),
       );
 
-    const setUsage = (d: UsageData) => patchAsst((m) => ({ ...m, usage: { ...d } }));
-
     const setSessionInfo = (d: SessionInfoData | null) => {
       // 防御：SESSION_INFO 的 eventData 理论上是对象，跨端异常时按 null 处理
       if (d && typeof d.conversationId === 'string' && d.conversationId) {
@@ -491,7 +414,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
 
     /**
      * 统一收尾：刷新文本缓冲 → 更新状态/结束原因 → 中断仍在运行的卡片 → 复位按钮。
-     * 1002(STOP) 与 1004(ERROR) 均为终结信号（文档 §4.1），其余路径也走这里。
+     * 1002(STOP) 与 1004(ERROR) 均为终结信号，其余路径也走这里。
      */
     const finish = (
       status: ChatMsg['status'],
@@ -525,7 +448,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     };
 
     /**
-     * 停止本次生成（文档 §7.3）：
+     * 停止本次生成：
      * 直接中断浏览器流；后端会按连接异常保存已生成的部分消息。
      */
     const requestStop = () => {
@@ -564,11 +487,8 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
             finishToolFailed(d);
           break;
         }
-        case EVENT.USAGE: {
-          const d = e.eventData as UsageData | null;
-          if (d && typeof d === 'object' && typeof d.totalTokens === 'number') setUsage(d);
+        case EVENT.USAGE:
           break;
-        }
         case EVENT.SESSION_INFO:
           setSessionInfo(e.eventData as SessionInfoData);
           break;
@@ -630,7 +550,7 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
             on: () => openSettingsRef.current(),
           });
         } else if (res.kind === 'timeout') {
-          // 流空闲超时（60s 无数据，本地兜底断连，文档 §8.7）
+          // 流空闲超时（60s 无数据，本地兜底断连）
           finish('stopped', { endReason: 'aborted' });
           notifyRef.current(res.message ?? '连接空闲超时，已自动中断', 'err');
         } else if (sawStop) {
@@ -656,7 +576,6 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
   /* ---------- 会话管理 ---------- */
   const select = (id: string) => {
     applyActive(id);
-    setHydrateTick((t) => t + 1);
   };
 
   const newChat = () => {
@@ -696,67 +615,15 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     notifyRef.current('已清空当前会话');
   };
 
-  /* ---------- 总结当前会话（POST /api/chat/{sessionId}/summarize，文档 §7.6） ---------- */
-  const summarizeActive = async () => {
-    const conv = listRef.current.find((c) => c.id === activeRef.current);
-    if (!conv || conv.messages.length === 0 || busyRef.current || summarizeRef.current) return;
-    summarizeRef.current = true;
-    setSummarizing(true);
-    try {
-      const res = await requestSummarize(conv.id, settingsRef.current.baseUrl);
-      if (!res) {
-        notifyRef.current('总结请求失败：后端不可达或接口异常', 'err');
-        return;
-      }
-      if (!res.summarized) {
-        // 后端幂等：消息太少或上次摘要后新积累不足
-        notifyRef.current('当前对话较短或近期已总结，暂无需压缩');
-        return;
-      }
-      const summaryText = res.summary ?? '';
-      if (!summaryText) {
-        notifyRef.current('后端未返回摘要文本');
-        return;
-      }
-      // 本地置顶插入一张摘要卡（旧的 system 摘要卡被替换，避免重复堆叠）
-      setConversations((ls) =>
-        ls.map((c) =>
-          c.id !== conv.id
-            ? c
-            : {
-                ...c,
-                messages: [
-                  {
-                    id: uid(),
-                    role: 'system',
-                    content: summaryText,
-                    status: 'done',
-                    createdAt: Date.now(),
-                  },
-                  ...c.messages.filter((m) => m.role !== 'system'),
-                ],
-                updatedAt: Date.now(),
-              },
-        ),
-      );
-      notifyRef.current('已生成会话历史摘要：更早的对话将被压缩引用，节省后续上下文');
-    } finally {
-      summarizeRef.current = false;
-      setSummarizing(false);
-    }
-  };
-
   return {
     conversations,
     activeId,
     busy,
-    summarizing,
     send,
     stop,
     select,
     newChat,
     removeConversation,
     clearContext,
-    summarizeActive,
   };
 }

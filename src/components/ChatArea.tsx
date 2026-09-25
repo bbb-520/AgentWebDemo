@@ -14,13 +14,9 @@ interface Props {
   busy: boolean;
   baseUrl: string;
   signedIn: boolean;
-  /** 是否正在请求后端压缩本会话（按钮转圈禁用） */
-  summarizing?: boolean;
   onSend: (q: string, file?: File) => void;
   onStop: () => void;
   onClear: () => void;
-  /** 手动触发会话压缩（POST /api/chat/{sessionId}/summarize） */
-  onSummarize?: () => void;
   onOpenSettings: () => void;
   onOpenLogin: () => void;
   onGoHome: () => void;
@@ -35,11 +31,9 @@ export default function ChatArea({
   busy,
   baseUrl,
   signedIn,
-  summarizing = false,
   onSend,
   onStop,
   onClear,
-  onSummarize,
   onOpenSettings,
   onOpenLogin,
   onGoHome,
