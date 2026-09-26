@@ -6,14 +6,29 @@ const SETTINGS_KEY = 'bobo.settings.v2';
 /** 最近选中的会话 id，刷新后自动恢复。 */
 const ACTIVE_SESSION_KEY = 'travel-agent.activeSessionId.v1';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function fallbackUuid(): string {
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function scopedKey(key: string, scope = 'guest'): string {
   const safe = scope.trim().toLowerCase().replace(/[^a-z0-9_.@-]/g, '_') || 'guest';
   return `${key}.${safe}`;
 }
 
 export function uid(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return fallbackUuid();
 }
 
 export function loadConversations(scope = 'guest'): Conversation[] {
@@ -24,7 +39,12 @@ export function loadConversations(scope = 'guest'): Conversation[] {
     if (!Array.isArray(arr)) return [];
     return arr
       .filter((c) => c && typeof c.id === 'string')
-      .map((c) => ({ ...c, messages: Array.isArray(c.messages) ? c.messages : [] }));
+      .map((c) => ({
+        ...c,
+        // 旧版本在非安全 HTTP 环境下可能生成 id-时间戳-随机串；迁移后再发送时必须使用 UUID。
+        id: UUID_PATTERN.test(c.id) ? c.id : uid(),
+        messages: Array.isArray(c.messages) ? c.messages : [],
+      }));
   } catch {
     return [];
   }

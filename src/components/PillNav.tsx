@@ -139,6 +139,32 @@ export default function PillNav({
     logoTweenRef.current = gsap.to(image, { rotate: 360, duration: 0.2, ease, overwrite: 'auto' });
   };
 
+  const animateMobileMenu = (open: boolean) => {
+    setIsMobileMenuOpen(open);
+    const hamburger = hamburgerRef.current;
+    const menu = mobileMenuRef.current;
+
+    if (hamburger) {
+      const lines = hamburger.querySelectorAll('.hamburger-line');
+      gsap.to(lines[0], { rotation: open ? 45 : 0, y: open ? 3 : 0, duration: 0.3, ease });
+      gsap.to(lines[1], { rotation: open ? -45 : 0, y: open ? -3 : 0, duration: 0.3, ease });
+    }
+
+    if (!menu) return;
+    if (open) {
+      gsap.set(menu, { visibility: 'visible' });
+      gsap.fromTo(menu, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, ease });
+      return;
+    }
+    gsap.to(menu, {
+      opacity: 0,
+      y: 10,
+      duration: 0.2,
+      ease,
+      onComplete: () => gsap.set(menu, { visibility: 'hidden' }),
+    });
+  };
+
   const handleItemClick = (item: PillNavItem, event: MouseEvent<HTMLAnchorElement>) => {
     event.stopPropagation();
     if (item.onClick) {
@@ -149,25 +175,7 @@ export default function PillNav({
 
   const toggleMobileMenu = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    const newState = !isMobileMenuOpen;
-    setIsMobileMenuOpen(newState);
-    const hamburger = hamburgerRef.current;
-    const menu = mobileMenuRef.current;
-
-    if (hamburger) {
-      const lines = hamburger.querySelectorAll('.hamburger-line');
-      gsap.to(lines[0], { rotation: newState ? 45 : 0, y: newState ? 3 : 0, duration: 0.3, ease });
-      gsap.to(lines[1], { rotation: newState ? -45 : 0, y: newState ? -3 : 0, duration: 0.3, ease });
-    }
-
-    if (menu) {
-      if (newState) {
-        gsap.set(menu, { visibility: 'visible' });
-        gsap.fromTo(menu, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, ease });
-      } else {
-        gsap.to(menu, { opacity: 0, y: 10, duration: 0.2, ease, onComplete: () => gsap.set(menu, { visibility: 'hidden' }) });
-      }
-    }
+    animateMobileMenu(!isMobileMenuOpen);
     onMobileMenuClick?.();
   };
 
@@ -216,23 +224,38 @@ export default function PillNav({
           </ul>
         </div>
 
-        <button className="mobile-menu-button mobile-only" onClick={toggleMobileMenu} aria-label="Toggle menu" ref={hamburgerRef}>
+        <button
+          type="button"
+          className="mobile-menu-button mobile-only"
+          onClick={toggleMobileMenu}
+          aria-label={isMobileMenuOpen ? '关闭菜单' : '打开菜单'}
+          aria-expanded={isMobileMenuOpen}
+          aria-controls="mobile-primary-menu"
+          ref={hamburgerRef}
+        >
           <span className="hamburger-line" />
           <span className="hamburger-line" />
         </button>
       </nav>
 
-      <div className="mobile-menu-popover mobile-only" ref={mobileMenuRef} style={cssVars}>
-        <ul className="mobile-menu-list">
+      <div
+        id="mobile-primary-menu"
+        className="mobile-menu-popover mobile-only"
+        ref={mobileMenuRef}
+        style={cssVars}
+        aria-hidden={!isMobileMenuOpen}
+      >
+        <ul className="mobile-menu-list" role="menu">
           {items.map((item, index) => (
             <li key={item.href || `mobile-item-${index}`}>
               <a
                 href={item.href || '#'}
                 className={`mobile-menu-link${activeHref === item.href ? ' is-active' : ''}`}
                 onClick={(event) => {
+                  animateMobileMenu(false);
                   handleItemClick(item, event);
-                  setIsMobileMenuOpen(false);
                 }}
+                role="menuitem"
               >
                 {item.label}
               </a>

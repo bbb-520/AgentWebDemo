@@ -319,6 +319,8 @@ textarea {
 
 /* ============ 顶部栏 ============ */
 .topbar {
+  position: relative;
+  z-index: 40;
   height: 58px;
   flex-shrink: 0;
   display: flex;
@@ -2815,8 +2817,10 @@ h4.md-h {
   .topbar-title { font-size: 12px; }
   .topbar > .icon-btn { flex: 0 0 40px; width: 40px; height: 40px; }
   .topbar .pill-nav-container {
+    position: relative;
     width: auto;
     margin-left: 0;
+    z-index: 41;
   }
   .topbar .pill-nav {
     width: auto;

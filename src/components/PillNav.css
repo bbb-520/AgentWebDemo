@@ -15,9 +15,10 @@
 .mobile-only { display: none; }
 .mobile-menu-button { width: var(--nav-h); height: var(--nav-h); border-radius: 50%; background: var(--base, #000); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0; position: relative; }
 .hamburger-line { width: 16px; height: 2px; background: var(--pill-bg, #fff); border-radius: 1px; transform-origin: center; }
-.mobile-menu-popover { position: absolute; top: 3em; left: 1rem; right: 1rem; background: var(--base, #f0f0f0); border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); z-index: 998; opacity: 0; transform-origin: top center; visibility: hidden; }
-.mobile-menu-list { list-style: none; margin: 0; padding: 3px; display: flex; flex-direction: column; gap: 3px; }
-.mobile-menu-popover .mobile-menu-link { display: block; padding: 12px 16px; color: var(--pill-text, #fff); background-color: var(--pill-bg, #fff); text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 50px; transition: all 0.2s ease; }
+.mobile-menu-popover { position: absolute; top: calc(100% + 10px); right: 0; left: auto; width: min(360px, calc(100vw - 32px)); max-height: min(70dvh, 420px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--base, #f0f0f0); border-radius: 20px; box-shadow: 0 18px 42px rgba(0, 0, 0, 0.2); z-index: 120; opacity: 0; transform-origin: top right; visibility: hidden; pointer-events: none; }
+.mobile-menu-popover[aria-hidden="false"] { pointer-events: auto; }
+.mobile-menu-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.mobile-menu-popover .mobile-menu-link { display: block; min-height: 48px; padding: 14px 18px; color: var(--pill-text, #fff); background-color: var(--pill-bg, #fff); text-decoration: none; font-size: 15px; font-weight: 650; line-height: 1.25; border-radius: 14px; transition: background-color 0.2s ease, color 0.2s ease; touch-action: manipulation; }
 .mobile-menu-popover .mobile-menu-link:hover, .mobile-menu-popover .mobile-menu-link.is-active { background-color: var(--base); color: var(--hover-text, #fff); }
 @media (max-width: 768px) { .pill-nav-container { width: 100%; left: 0; } .pill-nav { width: 100%; justify-content: space-between; padding: 0 1rem; background: transparent; } .desktop-only { display: none; } .mobile-only { display: flex; } .pill-logo { margin-right: 0; } .mobile-menu-popover { display: block; } }
 @media (prefers-reduced-motion: reduce) { .pill-logo, .pill, .mobile-menu-popover { transition: none; } }
