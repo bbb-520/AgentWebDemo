@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ImageJobRef } from '../types';
 import { apiUrl, fetchImageJob, publishBoboItem } from '../lib/api';
+import { ImageJobNotFoundError } from '../lib/imageJobPolling';
 import { IconClose, IconDownload, IconUpload } from './icons';
 import './image-job.css';
 
@@ -25,9 +26,13 @@ export function ImageJobCard({ job, baseUrl, signedIn, onManage }: {
   const refreshImageUrl = async () => {
     if (refreshAttempted) { setError('图片暂时无法读取，请稍后刷新会话。'); return; }
     setRefreshAttempted(true);
-    const refreshed = await fetchImageJob(job.jobId, baseUrl);
-    if (refreshed?.imageUrl) setImageUrl(refreshed.imageUrl);
-    else setError('图片暂时无法读取，请稍后刷新会话。');
+    try {
+      const refreshed = await fetchImageJob(job.jobId, baseUrl);
+      if (refreshed?.imageUrl) setImageUrl(refreshed.imageUrl);
+      else setError('图片暂时无法读取，请稍后刷新会话。');
+    } catch (cause) {
+      setError(cause instanceof ImageJobNotFoundError ? '图片任务已失效，请重新上传图片。' : '图片暂时无法读取，请稍后刷新会话。');
+    }
   };
 
   const downloadImage = () => {

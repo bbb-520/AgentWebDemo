@@ -3,6 +3,7 @@ import {
   type ImageAttachment,
   type ImageJobRef,
 } from '../types';
+import { imageJobResponseAction, ImageJobNotFoundError } from './imageJobPolling';
 
 /**
  * 拼接后端地址：baseUrl 为空时使用同源(开发经 Vite 代理 /api → Java 后端)。
@@ -213,10 +214,13 @@ export async function fetchImageJob(jobId: string, baseUrl: string, signal?: Abo
     const response = await fetch(apiUrl(`/api/image-jobs/${encodeURIComponent(jobId)}`, baseUrl), {
       credentials: 'include', signal,
     });
-    if (!response.ok) return null;
+    const action = imageJobResponseAction(response.status);
+    if (action === 'missing') throw new ImageJobNotFoundError(jobId);
+    if (action === 'retry') return null;
     const value = await response.json();
     return value && typeof value.jobId === 'string' ? value as ImageJobView : null;
-  } catch {
+  } catch (error) {
+    if (error instanceof ImageJobNotFoundError) throw error;
     return null;
   }
 }

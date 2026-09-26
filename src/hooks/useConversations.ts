@@ -21,6 +21,7 @@ import {
   fetchImageJob,
   uploadImageAsset,
 } from '../lib/api';
+import { ImageJobNotFoundError } from '../lib/imageJobPolling';
 import {
   deriveTitle,
   loadActiveSessionId,
@@ -196,17 +197,37 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
     }));
   };
 
+  const removeImageJob = (convId: string, msgId: string, jobId: string) => {
+    setConversations((ls) => ls.map((c) => c.id !== convId ? c : {
+      ...c,
+      messages: c.messages.map((m) => m.id !== msgId ? m : {
+        ...m,
+        imageJobs: (m.imageJobs ?? []).filter((item) => item.jobId !== jobId),
+      }),
+    }));
+  };
+
   const watchImageJob = (convId: string, msgId: string, jobId: string) => {
     if (imagePollersRef.current.has(jobId)) return;
+    const stopPolling = () => {
+      const timer = imagePollersRef.current.get(jobId);
+      if (timer) window.clearInterval(timer);
+      imagePollersRef.current.delete(jobId);
+    };
     const tick = async () => {
-      const job = await fetchImageJob(jobId, settingsRef.current.baseUrl);
-      if (!job) return;
-      patchJob(convId, msgId, job);
-      if (job.status === 'SUCCEEDED' || job.status === 'FAILED' || job.status === 'CANCELED' || job.status === 'EXPIRED') {
-        const timer = imagePollersRef.current.get(jobId);
-        if (timer) window.clearInterval(timer);
-        imagePollersRef.current.delete(jobId);
-        if (job.status === 'SUCCEEDED') notifyRef.current('图片已生成，结果已回到当前对话');
+      try {
+        const job = await fetchImageJob(jobId, settingsRef.current.baseUrl);
+        if (!job) return;
+        patchJob(convId, msgId, job);
+        if (job.status === 'SUCCEEDED' || job.status === 'FAILED' || job.status === 'CANCELED' || job.status === 'EXPIRED') {
+          stopPolling();
+          if (job.status === 'SUCCEEDED') notifyRef.current('图片已生成，结果已回到当前对话');
+        }
+      } catch (error) {
+        if (!(error instanceof ImageJobNotFoundError)) return;
+        stopPolling();
+        removeImageJob(convId, msgId, jobId);
+        notifyRef.current('图片任务已失效，请重新上传图片');
       }
     };
     void tick();
