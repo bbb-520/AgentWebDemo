@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "test:storage": "node scripts/test-storage-uid.mjs",
-    "test:image-job-404": "node --experimental-strip-types --test scripts/test-image-job-404.mjs"
+    "test:image-job-404": "node --experimental-strip-types --test scripts/test-image-job-404.mjs",
+    "test:image-job-reconcile": "node --experimental-strip-types --test scripts/test-image-job-reconcile.mjs"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.3.5",

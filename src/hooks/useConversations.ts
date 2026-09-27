@@ -21,7 +21,7 @@ import {
   fetchImageJob,
   uploadImageAsset,
 } from '../lib/api';
-import { ImageJobNotFoundError } from '../lib/imageJobPolling';
+import { ImageJobNotFoundError, reconcileImageJobs } from '../lib/imageJobPolling';
 import {
   deriveTitle,
   loadActiveSessionId,
@@ -237,26 +237,11 @@ export function useConversations({ settings, accountScope = 'guest', notify, ope
 
   const hydrateImageJobs = async (convId: string) => {
     const jobs = await fetchConversationImageJobs(convId, settingsRef.current.baseUrl);
-    if (!jobs.length) return;
+    // null means the refresh failed; retain local cards and retry on the next session refresh.
+    if (jobs === null) return;
     setConversations((ls) => ls.map((c) => {
       if (c.id !== convId) return c;
-      const assistantIds = c.messages.filter((m) => m.role === 'assistant').map((m) => m.id);
-      const fallbackId = assistantIds[assistantIds.length - 1];
-      const messages = c.messages.map((m) => m);
-      const target = fallbackId ? messages.findIndex((m) => m.id === fallbackId) : -1;
-      if (target >= 0) {
-        const fresh = new Map(jobs.map((job) => [job.jobId, job]));
-        const existing = messages[target].imageJobs ?? [];
-        messages[target] = {
-          ...messages[target],
-          // 后端返回的是新签发的短期 URL，同 ID 也要覆盖本地旧快照。
-          imageJobs: [
-            ...existing.map((job) => fresh.get(job.jobId) ?? job),
-            ...jobs.filter((job) => !existing.some((item) => item.jobId === job.jobId)),
-          ],
-        };
-      }
-      return { ...c, messages };
+      return reconcileImageJobs(c, jobs);
     }));
     const assistantId = listRef.current.find((c) => c.id === convId)?.messages.filter((m) => m.role === 'assistant').at(-1)?.id;
     if (assistantId) jobs.filter((job) => job.status === 'QUEUED' || job.status === 'PROCESSING').forEach((job) => watchImageJob(convId, assistantId, job.jobId));

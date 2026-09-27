@@ -224,16 +224,16 @@ export async function fetchImageJob(jobId: string, baseUrl: string, signal?: Abo
     return null;
   }
 }
-export async function fetchConversationImageJobs(conversationId: string, baseUrl: string): Promise<ImageJobView[]> {
+export async function fetchConversationImageJobs(conversationId: string, baseUrl: string): Promise<ImageJobView[] | null> {
   try {
     const response = await fetch(apiUrl(`/api/image-jobs?conversationId=${encodeURIComponent(conversationId)}`, baseUrl), {
       credentials: 'include',
     });
-    if (!response.ok) return [];
+    if (!response.ok) return null;
     const value = await response.json();
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
