@@ -1,6 +1,6 @@
-# AgentWebDemo
+# Bobo_web
 
-`AgentWebDemo` 是 AgentDemo 的 React/Vite 前端。生产环境由 Nginx 提供构建产物，并把同源 `/api/` 请求转发给 Spring Boot 后端。
+`BoboWeb` 是 Bobo4J 的 React/Vite 前端。生产环境由 Nginx 提供构建产物，并把同源 `/api/` 请求转发给 Spring Boot 后端。
 
 ## 开发
 
